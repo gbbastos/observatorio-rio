@@ -7,6 +7,11 @@ on:
   schedule:
     - cron: '0 8 */2 * *'   # 05:00 no Rio
   workflow_dispatch:
+    inputs:
+      rapido:
+        description: 'Rápido: pula a coleta da Tomoyo e as fichas das leis (usa os dados já versionados)'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -43,18 +48,19 @@ jobs:
           key: brutos-${{ github.run_id }}
           restore-keys: brutos-
 
-      - name: Instalar a coleta da Tomoyo
-        run: |
-          pip install -e vendor/como-votou/backend
-          pip install -e vendor/assembleias/backend
+      # os dois backends da Tomoyo se chamam "app"; em vez de instalá-los, cada um roda da própria pasta
+      - name: Instalar dependências da coleta da Tomoyo
+        run: pip install "httpx>=0.27" "lxml>=5.0" "beautifulsoup4>=4.12" "pillow>=10" "pdfplumber>=0.11" "pypdfium2>=4"
 
       - name: Coletar Câmara do Rio (Tomoyo)
+        if: ${{ !inputs.rapido }}
         working-directory: vendor/como-votou/backend
         run: |
           python -m app.etl.export_snapshot --all
           python -m app.etl.export_static_frontend
 
       - name: Coletar ALERJ (Tomoyo)
+        if: ${{ !inputs.rapido }}
         working-directory: vendor/assembleias/backend
         continue-on-error: true   # se a ALERJ falhar, o site sai com o último dado da ALERJ no repositório
         run: |
@@ -63,7 +69,7 @@ jobs:
 
       - name: Coletar leis da Câmara
         working-directory: pipeline
-        run: python -m observatorio.coletar
+        run: python -m observatorio.coletar ${{ inputs.rapido && '--sem-fichas' || '' }}
 
       - name: Resumir leis novas com IA
         if: env.TEM_CHAVE_IA == 'true'
