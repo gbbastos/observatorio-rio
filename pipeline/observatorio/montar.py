@@ -20,8 +20,10 @@ from typing import Any
 
 from . import classificar as C
 from . import config
+from . import temas as T
 
 sys.path.insert(0, str(config.COMO_VOTOU / "backend"))
+from app.etl.aggregates import legislatura_of, party_majority, party_of  # noqa: E402
 from app.names import NameResolver, is_institutional  # noqa: E402  (casamento de nomes da Tomoyo)
 
 RESUMOS = config.CACHE_DIR / "resumos.json"
@@ -114,11 +116,32 @@ def gravar(p: Path, dado: Any) -> None:
 
 def resumo_categorias(xs: list[dict[str, Any]]) -> dict[str, Any]:
     cats = Counter(x["categoria"] for x in xs)
-    return {"total": len(xs), "simbolicas": sum(cats[c] for c in cats if C.simbolica(c)), "por_categoria": dict(cats)}
+    temas = Counter(x["tema"] for x in xs if x.get("tema"))
+    return {"total": len(xs), "simbolicas": sum(cats[c] for c in cats if C.simbolica(c)), "por_categoria": dict(cats),
+            "por_tema": dict(temas)}
+
+
+def tema_de(categoria: str | None, ementa: str, texto: str | None = None) -> str | None:
+    """Só as leis e projetos que não são simbólicos ganham tema."""
+    return T.tema(ementa, texto) if categoria and not C.simbolica(categoria) else None
+
+
+def mandatos_da_casa(legislaturas: list[dict[str, Any]], ano_inicial: int) -> list[dict[str, Any]]:
+    """Legislaturas cobertas pelos dados, com rótulo em anos ("2021–2024"; a da ALERJ que acaba em
+    31/1/2023 vira "2019–2022")."""
+    out = []
+    for lg in legislaturas:
+        if int(lg["fim"][:4]) < ano_inicial:
+            continue
+        fim = int(lg["fim"][:4]) - (1 if lg["fim"][5:7] == "01" else 0)
+        out.append({"leg": int(lg["numero"]), "inicio": lg["inicio"], "fim": lg["fim"],
+                    "rotulo": f"{lg['inicio'][:4]}–{fim}"})
+    return out
 
 
 def montar_normas(casa: Casa, resolver: NameResolver, slugs: dict[str, str], nome_por_id: dict[str, str],
-                  resumos: dict[str, str]) -> tuple[list[dict[str, Any]], Counter[str], str | None]:
+                  resumos: dict[str, str], legislaturas: list[dict[str, Any]]
+                  ) -> tuple[list[dict[str, Any]], Counter[str], str | None]:
     if not casa.normas or not casa.normas.exists():
         return [], Counter(), None
     doc = ler_json(casa.normas)
@@ -151,7 +174,10 @@ def montar_normas(casa: Casa, resolver: NameResolver, slugs: dict[str, str], nom
         leis.append({
             "id": n["id"], "tipo": n["tipo"], "numero": n["numero"], "ano": n["ano"],
             "data": ficha.get("data"), "ementa": consertar(n["ementa"]), "categoria": categoria,
-            "simbolica": C.simbolica(categoria), "status": n.get("status"),
+            "simbolica": C.simbolica(categoria),
+            "tema": tema_de(categoria, n["ementa"], ficha.get("texto")) if n["tipo"] in TIPOS_LEI else None,
+            "leg": legislatura_of(ficha.get("data") or f"{n['ano']}-07-01", legislaturas),
+            "status": n.get("status"),
             "projeto": ficha.get("projeto"), "forma": ficha.get("forma"),
             "autores": autores, "n_autores": sum(1 for a in autores if not a.get("inst")),
             "url": f"{config.CONTLEI}/{n['visao']}/{n['unid']}?OpenDocument",
@@ -181,13 +207,22 @@ def montar(casa: Casa) -> None:
         shutil.rmtree(fotos)
     fotos.mkdir(parents=True, exist_ok=True)
 
-    leis, nao_casados, coletado_em = montar_normas(casa, resolver, slugs, nome_por_id, resumos)
+    legislaturas = estatico["legislaturas"]
+    mandatos = mandatos_da_casa(legislaturas, casa.ano_inicial)
+    legs_cobertas = {m["leg"] for m in mandatos}
+
+    leis, nao_casados, coletado_em = montar_normas(casa, resolver, slugs, nome_por_id, resumos, legislaturas)
     tem_leis = bool(leis)
     leis_por_parlamentar: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    lei_do_projeto: dict[str, str] = {}
     for lei in leis:
         for a in lei["autores"]:
             if a.get("id"):
                 leis_por_parlamentar[a["id"]].append(lei)
+        if lei["projeto"] and lei["tipo"] in TIPOS_LEI:
+            lei_do_projeto[lei["projeto"]] = lei["id"]
+    por_id = {v["id"]: v for v in roster}
+    contra_partido: dict[tuple[str, str], bool] = {}   # (parlamentar, votação) -> votou contra a maioria do partido
 
     # --- votações -----------------------------------------------------------------------------
     votacoes: list[dict[str, Any]] = []
@@ -211,10 +246,21 @@ def montar(casa: Casa) -> None:
             "contagem": vt.get("contagem"), "lado_vencedor": vt.get("lado_vencedor"), "fonte": vt.get("fonte"),
         }
         votacoes.append(resumo)
+        # mesma conta da Tomoyo (aggregates.py), guardada voto a voto para dar o número de cada mandato
+        votos_vt = completo.get("votos", {})
+        leg_vt = int(vt["legislatura"]) if vt.get("legislatura") else legislatura_of(vt["data"], legislaturas)
+        partido_de = {vid: party_of(por_id[vid], leg_vt) if vid in por_id else None for vid in votos_vt}
+        for vid, voto in votos_vt.items():
+            if voto in ("sim", "nao"):
+                maioria = party_majority(votos_vt, partido_de, partido_de.get(vid))
+                if maioria is not None:
+                    contra_partido[(vid, slug)] = voto != maioria
         gravar(saida / "votacoes" / f"{slug}.json",
                {**resumo, "votos": completo.get("votos", {}), "presidente": vt.get("presidente")})
     votacoes.sort(key=lambda x: (x["data"], x["id"]), reverse=True)
     data_votacao = {v["id"]: v["data"] for v in votacoes}
+    leg_votacao = {v["id"]: int(v["legislatura"]) if v.get("legislatura") else legislatura_of(v["data"], legislaturas)
+                   for v in votacoes}
 
     # --- ficha de cada parlamentar --------------------------------------------------------
     lista: list[dict[str, Any]] = []
@@ -242,6 +288,9 @@ def montar(casa: Casa) -> None:
             cat = C.classificar(p["ementa"]) if classificavel else None
             item = {"id": p["id"], "tipo": p["tipo"], "data": p.get("data"), "ementa": consertar(p["ementa"]),
                     "categoria": cat, "simbolica": C.simbolica(cat) if cat else None,
+                    "tema": tema_de(cat, p["ementa"]) if p["tipo"] in TIPOS_PROJETO else None,
+                    "leg": legislatura_of(p.get("data") or f"{p['ano']}-07-01", legislaturas),
+                    "lei": lei_do_projeto.get(p["id"]),
                     "coautores": len(p.get("coautores") or [])}
             props.append(item)
             if p["tipo"] in TIPOS_PROJETO:
@@ -250,7 +299,11 @@ def montar(casa: Casa) -> None:
         projetos = [p for p in props if p["tipo"] in TIPOS_PROJETO]
         cat_projetos = Counter(p["categoria"] for p in projetos)
 
-        votos = [{"id": x["votacao_id"].replace(":", "-"), "voto": x["voto"]} for x in detalhe["votos"]]
+        votos = []
+        for x in detalhe["votos"]:
+            vot = x["votacao_id"].replace(":", "-")
+            votos.append({"id": vot, "voto": x["voto"], "leg": leg_votacao.get(vot),
+                          "contra_partido": contra_partido.get((vid, vot))})
         votos.sort(key=lambda x: data_votacao.get(x["id"], ""), reverse=True)
 
         resumo = {
@@ -258,6 +311,7 @@ def montar(casa: Casa) -> None:
             "partido": partido(v.get("partido")),
             "partidos_por_legislatura": {k: partido(p) for k, p in (v.get("partidos_por_legislatura") or {}).items()},
             "em_exercicio": v.get("situacao") == "em_exercicio", "legislaturas": v.get("legislaturas", []),
+            "mandatos": sorted(int(x) for x in v.get("legislaturas", []) if int(x) in legs_cobertas),
             "foto": foto, "email": v.get("email"), "perfil_url": v.get("perfil_url"),
             "leis": {
                 "total": len(leis_ord), "simbolicas": sum(por_cat[c] for c in por_cat if C.simbolica(c)),
@@ -272,6 +326,7 @@ def montar(casa: Casa) -> None:
                 "por_tipo": dict(tipos), "pl": len(projetos),
                 "pl_simbolicos": sum(cat_projetos[c] for c in cat_projetos if C.simbolica(c)),
                 "pl_por_categoria": dict(cat_projetos),
+                "pl_viraram_lei": sum(1 for p in projetos if p["lei"]),
                 "honrarias": sum(1 for p in props if p["tipo"] in TIPOS_HONRARIA and p["categoria"] == "honraria"),
                 "reqinf": tipos.get("REQINF", 0), "indicacoes": tipos.get("IND", 0), "mocoes": tipos.get("MOC", 0),
                 "ultima": max((p["data"] for p in props if p["data"]), default=None),
@@ -285,7 +340,8 @@ def montar(casa: Casa) -> None:
         gravar(saida / "parlamentares" / f"{slug}.json", {
             **resumo,
             "lista_leis": [{k: x[k] for k in ("id", "tipo", "numero", "ano", "data", "ementa", "categoria",
-                                              "simbolica", "status", "n_autores", "url", "resumo")}
+                                              "simbolica", "tema", "leg", "projeto", "status", "n_autores", "url",
+                                              "resumo")}
                            | {"coautores": [a["nome"] for a in x["autores"] if a.get("id") != vid]}
                            for x in minhas],
             "lista_proposicoes": sorted(props, key=lambda p: p["data"] or "", reverse=True),
@@ -307,14 +363,17 @@ def montar(casa: Casa) -> None:
     meta = {
         "casa": casa.id, "nome": casa.nome, "curto": casa.curto, "membro": casa.membro, "membros": casa.membros,
         "cadeiras": casa.cadeiras, "legislatura_atual": leg_atual, "ano_inicial": casa.ano_inicial,
+        "mandatos": mandatos,
         "tem_leis": tem_leis,
         "atualizado_em": max(filter(None, [estatico["generated_at"], coletado_em])),
         "montado_em": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "categorias": C.CATEGORIAS,
+        "temas": T.TEMAS,
         "leis": resumo_categorias(leis_ord_todas),
         "leis_legislatura": resumo_categorias([x for x in leis_ord_todas if x["ano"] >= ano_leg]),
         "leis_por_ano": por_ano(leis_ord_todas, lambda x: x["ano"]),
         "projetos": resumo_categorias(projetos),
+        "projetos_viraram_lei": sum(1 for p in projetos if p["lei"]),
         "projetos_por_ano": por_ano(projetos, ano_projeto),
         "titulos": sum(1 for x in leis if x["tipo"] == "DL" and x["categoria"] == "honraria"),
         "votacoes": len(votacoes),

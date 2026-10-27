@@ -55,7 +55,7 @@ export const ROTULO_CURTO: Record<string, string> = {
   utilidade_publica: 'Utilidade pública',
   patrimonio: 'Patrimônio / polo',
   honraria: 'Homenagem',
-  normativa: 'Demais leis',
+  normativa: 'Regras e políticas',
 };
 
 export const ROTULO_VOTO: Record<string, string> = {

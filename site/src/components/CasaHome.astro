@@ -105,7 +105,7 @@ const rankings = [
   { titulo: temLeis ? 'Título de cidadão' : 'Medalha e título', sub: temLeis ? 'títulos e medalhas concedidos por decreto' : 'títulos, medalhas e diplomas propostos',
     lista: top(honrariasDe), valor: (p: Parlamentar) => num(honrariasDe(p)), extra: () => 'honrarias' },
   temLeis
-    ? { titulo: 'Peso real', sub: 'demais leis, cada uma dividida pelo nº de autores', lista: top((p) => p.leis.peso_normativas),
+    ? { titulo: 'Peso real', sub: 'regras e políticas, cada uma dividida pelo nº de autores', lista: top((p) => p.leis.peso_normativas),
         valor: (p: Parlamentar) => num(p.leis.peso_normativas, 1), extra: (p: Parlamentar) => `de ${num(p.leis.total - p.leis.simbolicas)} com o nome` }
     : { titulo: 'Moção', sub: 'moções de aplauso, louvor e repúdio', lista: top((p) => p.proposicoes.mocoes),
         valor: (p: Parlamentar) => num(p.proposicoes.mocoes), extra: () => 'moções' },

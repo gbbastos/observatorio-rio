@@ -15,7 +15,7 @@ CATEGORIAS = {
     "utilidade_publica": {"rotulo": "Utilidade pública", "simbolica": True},
     "patrimonio": {"rotulo": "Patrimônio, polo e roteiro", "simbolica": True},
     "honraria": {"rotulo": "Título, medalha e homenagem", "simbolica": True},
-    "normativa": {"rotulo": "Demais leis", "simbolica": False},
+    "normativa": {"rotulo": "Regras e políticas", "simbolica": False},
 }
 
 _LUGAR = (r"logradouro|rua|pra[cç]a|travessa|avenida|estrada|alameda|largo|beco|vila|viaduto|t[uú]nel|"

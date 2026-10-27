@@ -1,0 +1,174 @@
+---
+// Lista de leis aprovadas ou de projetos apresentados na ficha do parlamentar: barra por categoria
+// (clicável), glossário das categorias, filtros, temas das regras e políticas e a lista em si. O
+// filtro roda no script da ficha ([slug].astro); cada item leva o mandato em data-leg.
+import BarraCategorias from './BarraCategorias.astro';
+import Carimbo from './Carimbo.astro';
+import { ORDEM_CATEGORIAS, ORDEM_TEMAS, ROTULO_TEMA, DEFINICAO_CATEGORIA, COR_CATEGORIA } from '../lib/categorias';
+import { u, num, dataCurta, ROTULO_CURTO } from '../lib/formatar';
+
+export interface ItemProducao {
+  id: string; rotulo: string; url: string | null; data: string | null; ano: number | string;
+  ementa: string; resumo?: string | null; categoria: string; simbolica: boolean; tema: string | null;
+  leg: number | null; n_autores: number; coautores?: string[]; status?: string | null;
+  lei?: { rotulo: string; url: string | null } | null;
+}
+
+interface Props {
+  id: string;
+  titulo: string;
+  /** "leis" ou "projetos de lei": vai na contagem do cabeçalho */
+  plural: string;
+  sub: string;
+  feminino: boolean;
+  itens: ItemProducao[];
+  /** filtro a mais: leis assinadas em grupo ou projetos que viraram lei */
+  extra?: 'grupo' | 'virou';
+  /** quantos itens aparecem antes do "mostrar mais" */
+  limite?: number;
+  /** observação curta abaixo do cabeçalho */
+  nota?: string;
+}
+const { id, titulo, plural, sub, feminino, itens, extra, limite = 30, nota } = Astro.props;
+const a = feminino ? 'a' : 'o';
+
+const porCategoria: Record<string, number> = {};
+const porTema: Record<string, number> = {};
+for (const x of itens) {
+  porCategoria[x.categoria] = (porCategoria[x.categoria] ?? 0) + 1;
+  if (!x.simbolica && x.tema) porTema[x.tema] = (porTema[x.tema] ?? 0) + 1;
+}
+// do maior para o menor, com "outros" sempre no fim
+const temas = ORDEM_TEMAS.filter((t) => porTema[t])
+  .sort((x, y) => Number(x === 'outros') - Number(y === 'outros') || porTema[y] - porTema[x]);
+const statusRuim = (s?: string | null) => !!s && /inconstitucional|revoga/i.test(s);
+---
+<section class="secao producao" id={id} data-secao data-limite={limite}>
+  <header>
+    <h2 class="display">{titulo}</h2>
+    <span class="rubrica"><span data-total>{num(itens.length)}</span> {plural} {sub}</span>
+  </header>
+  {nota && <p class="nota-secao">{nota}</p>}
+
+  <BarraCategorias porCategoria={porCategoria} alta filtravel />
+
+  <details class="glossario">
+    <summary class="rubrica">O que entra em cada categoria?</summary>
+    <dl>
+      {ORDEM_CATEGORIAS.map((c) => (
+        <div>
+          <dt><span class="q" style={`background:${COR_CATEGORIA[c]}`}></span>{ROTULO_CURTO[c]}</dt>
+          <dd>{DEFINICAO_CATEGORIA[c]}</dd>
+        </div>
+      ))}
+    </dl>
+    <p class="nota">
+      A separação é automática: regras de texto leem a ementa, o resumo oficial que abre cada lei ou
+      projeto. Nas leis da Câmara do Rio de nome de rua, calendário e utilidade pública valem as listas que
+      a própria Câmara publica, e as regras concordam com elas em 98% das leis. O tema das regras e
+      políticas também sai da ementa. <a href={u('/sobre/')}>Como os números são feitos</a>.
+    </p>
+  </details>
+
+  <div class="filtros" role="group" aria-label="Filtrar">
+    <button class="botao" type="button" data-filtro="todas" aria-pressed="true">Tod{a}s</button>
+    <button class="botao" type="button" data-filtro="simbolica" aria-pressed="false">Só simbólic{a}s</button>
+    <button class="botao" type="button" data-filtro="normativa" aria-pressed="false">Só regras e políticas</button>
+    {extra === 'grupo' && <button class="botao" type="button" data-filtro="grupo" aria-pressed="false">Assinadas em grupo</button>}
+    {extra === 'virou' && <button class="botao" type="button" data-filtro="virou" aria-pressed="false">Viraram lei</button>}
+  </div>
+
+  {temas.length > 0 && (
+    <div class="temas" role="group" aria-label="Regras e políticas por tema">
+      <span class="rubrica">Regras e políticas por tema</span>
+      <div class="chips">
+        {temas.map((t) => (
+          <button type="button" class="tema" data-tema={t} aria-pressed="false">
+            {ROTULO_TEMA[t]} <b data-n>{porTema[t]}</b>
+          </button>
+        ))}
+      </div>
+    </div>
+  )}
+
+  <ol class="itens">
+    {itens.map((x, i) => (
+      <li data-item data-leg={x.leg ?? undefined} data-cat={x.categoria} data-simb={x.simbolica ? '1' : undefined}
+          data-tema={x.tema ?? undefined} data-grupo={x.n_autores > 1 ? '1' : undefined}
+          data-virou={x.lei ? '1' : undefined} hidden={i >= limite}>
+        <div class="im">
+          {x.url ? <a href={x.url} rel="noopener">{x.rotulo}</a> : <span>{x.rotulo}</span>}
+          <span class="dt">{x.data ? dataCurta(x.data) : x.ano}</span>
+        </div>
+        <div class="ic">
+          <p class="em">{x.ementa}</p>
+          {x.resumo && <p class="rs"><span class="rubrica">Em poucas palavras:</span> {x.resumo}</p>}
+          <p class="ir">
+            {x.simbolica || !x.tema
+              ? <Carimbo categoria={x.categoria} pequeno />
+              : <Carimbo texto={ROTULO_TEMA[x.tema]} tom="tinta" pequeno />}
+            {statusRuim(x.status) && <Carimbo texto={x.status!} tom="tinta" pequeno />}
+            {x.lei && (x.lei.url
+              ? <a class="virou" href={x.lei.url} rel="noopener">virou {x.lei.rotulo}</a>
+              : <span class="virou">virou {x.lei.rotulo}</span>)}
+            {x.n_autores > 1 && (
+              <span class="co" title={x.coautores?.join(', ') || undefined}>
+                com mais {x.n_autores - 1} {x.n_autores - 1 === 1 ? 'autor' : 'autores'}
+              </span>
+            )}
+          </p>
+        </div>
+      </li>
+    ))}
+  </ol>
+  <p class="vazio rubrica" data-vazio hidden>Nada neste filtro.</p>
+  <button class="botao mais" type="button" data-mais hidden={itens.length <= limite}>
+    Mostrar mais <span data-faltam>{num(itens.length - limite)}</span>
+  </button>
+</section>
+
+<style is:global>
+  /* global e com prefixo: estilo com escopo poria um atributo em cada um dos centenas de itens */
+  .ficha .secao { scroll-margin-top: 64px; }
+  .producao .glossario { margin: 18px 0 0; border-top: 1px solid var(--linha); border-bottom: 1px solid var(--linha); }
+  .producao .glossario summary { cursor: pointer; padding: 10px 0; list-style-position: inside; }
+  .producao .glossario dl { margin: 4px 0 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px 28px; }
+  .producao .glossario dt { font-family: var(--f-mono); font-size: 13px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.06em; display: flex; align-items: center; gap: 8px; }
+  .producao .glossario dd { margin: 4px 0 0; font-size: 16px; line-height: 1.4; color: var(--tinta-2); }
+  .producao .glossario .q { width: 11px; height: 11px; display: inline-block; flex: none; }
+  .producao .glossario .nota { font-size: 14px; color: var(--tinta-3); margin: 16px 0 14px; max-width: 75ch; }
+  .producao .nota-secao { margin: -6px 0 16px; font-size: 15px; color: var(--tinta-3); max-width: 80ch; }
+  .producao .filtros { display: flex; flex-wrap: wrap; gap: 6px; margin: 22px 0 10px; }
+  .producao .temas { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin: 0 0 10px; }
+  .producao .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .producao .tema { white-space: nowrap; font-family: var(--f-mono); font-size: 13px; color: var(--tinta); background: var(--papel-2);
+    border: 1px solid var(--linha); padding: 5px 9px; cursor: pointer; }
+  .producao .tema b { color: var(--tinta-3); font-weight: 400; margin-left: 2px; }
+  .producao .tema:hover { border-color: var(--tinta); }
+  .producao .tema[aria-pressed='true'] { background: var(--tinta); color: var(--papel); border-color: var(--tinta); }
+  .producao .tema[aria-pressed='true'] b { color: inherit; }
+  .producao .tema[hidden] { display: none; }
+  .producao .itens { list-style: none; margin: 0; padding: 0; }
+  .producao .itens li { display: grid; grid-template-columns: 150px 1fr; gap: 18px; padding: 16px 0;
+    border-bottom: 1px solid var(--linha); content-visibility: auto; contain-intrinsic-size: auto 110px; }
+  .producao .itens li[hidden] { display: none; }
+  .producao .im { display: grid; gap: 4px; align-content: start; font-family: var(--f-mono); font-size: 13px;
+    text-transform: uppercase; letter-spacing: 0.06em; }
+  .producao .im a, .producao .im span:first-child { color: var(--tinta); font-weight: 700; }
+  .producao .dt { font-size: 12px; color: var(--tinta-3); }
+  .producao .em { margin: 0; font-size: 19px; line-height: 1.38; }
+  .producao .rs { margin: 8px 0 0; font-size: 16px; color: var(--tinta-2); }
+  .producao .ir { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 10px 0 0; }
+  .producao .virou { font-family: var(--f-mono); font-size: 13px; font-weight: 700; color: var(--verde); }
+  .producao .co { font-family: var(--f-mono); font-size: 13px; color: var(--carimbo); border-bottom: 1px dotted currentColor; cursor: help; }
+  .producao .mais { margin-top: 18px; }
+  @media (max-width: 600px) {
+    .producao .filtros .botao { padding: 7px 9px; font-size: 12px; }
+    .producao .temas { display: block; }
+    .producao .temas .rubrica { display: block; margin-bottom: 6px; }
+    .producao .chips { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 8px; scrollbar-width: thin; }
+    .producao .itens li { grid-template-columns: 1fr; gap: 6px; }
+    .producao .im { display: flex; gap: 12px; }
+  }
+</style>

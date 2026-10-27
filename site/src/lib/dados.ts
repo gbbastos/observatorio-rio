@@ -8,7 +8,12 @@ export interface ResumoLeis {
   total: number;
   simbolicas: number;
   por_categoria: Record<string, number>;
+  /** só as que não são simbólicas */
+  por_tema: Record<string, number>;
 }
+
+/** Legislatura coberta pelos dados ("2021–2024"). */
+export interface Mandato { leg: number; inicio: string; fim: string; rotulo: string }
 
 export interface Meta {
   casa: Casa;
@@ -19,14 +24,17 @@ export interface Meta {
   cadeiras: number;
   legislatura_atual: { numero: number; inicio: string; fim: string };
   ano_inicial: number;
+  mandatos: Mandato[];
   /** false quando a casa não tem base de leis aprovadas (ALERJ): o site mostra os projetos apresentados */
   tem_leis: boolean;
   atualizado_em: string;
   categorias: Record<string, Categoria>;
+  temas: Record<string, string>;
   leis: ResumoLeis;
   leis_legislatura: ResumoLeis;
   leis_por_ano: Record<string, ResumoLeis>;
   projetos: ResumoLeis;
+  projetos_viraram_lei: number;
   projetos_por_ano: Record<string, ResumoLeis>;
   titulos: number;
   votacoes: number;
@@ -42,6 +50,8 @@ export interface Parlamentar {
   partidos_por_legislatura: Record<string, string | null>;
   em_exercicio: boolean;
   legislaturas: number[];
+  /** legislaturas cobertas pelos dados em que exerceu mandato */
+  mandatos: number[];
   foto: string | null;
   email?: string | null;
   perfil_url?: string | null;
@@ -52,6 +62,7 @@ export interface Parlamentar {
   titulos: number;
   proposicoes: {
     por_tipo: Record<string, number>; pl: number; pl_simbolicos: number; pl_por_categoria: Record<string, number>;
+    pl_viraram_lei: number;
     honrarias: number; reqinf: number; indicacoes: number; mocoes: number; ultima: string | null;
   };
   votacoes: {
@@ -63,26 +74,31 @@ export interface Parlamentar {
 
 export interface LeiResumo {
   id: string; tipo: string; numero: number; ano: number; data: string | null; ementa: string;
-  categoria: string; simbolica: boolean; status: string | null; n_autores: number; url: string;
-  resumo: string | null; coautores: string[];
+  categoria: string; simbolica: boolean; tema: string | null; leg: number | null; projeto: string | null;
+  status: string | null; n_autores: number; url: string; resumo: string | null; coautores: string[];
 }
 
 export interface Proposicao {
   id: string; tipo: string; data: string | null; ementa: string; categoria: string | null;
-  simbolica: boolean | null; coautores: number;
+  simbolica: boolean | null; tema: string | null; leg: number | null;
+  /** lei que saiu deste projeto, quando a casa tem base de leis */
+  lei: string | null; coautores: number;
 }
+
+export interface Voto { id: string; voto: string; leg: number | null; contra_partido: boolean | null }
 
 export interface ParlamentarDetalhe extends Parlamentar {
   lista_leis: LeiResumo[];
   lista_proposicoes: Proposicao[];
-  lista_votos: { id: string; voto: string }[];
+  lista_votos: Voto[];
 }
 
 export interface Autor { id?: string; slug?: string; nome: string; inst?: boolean }
 
 export interface Lei {
   id: string; tipo: string; numero: number; ano: number; data: string | null; ementa: string;
-  categoria: string; simbolica: boolean; status: string | null; projeto: string | null; forma: string | null;
+  categoria: string; simbolica: boolean; tema: string | null; leg: number | null;
+  status: string | null; projeto: string | null; forma: string | null;
   autores: Autor[]; n_autores: number; url: string; resumo: string | null;
 }
 

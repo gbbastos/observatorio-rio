@@ -3,6 +3,7 @@ import Base from '../layouts/Base.astro';
 import Carimbo from '../components/Carimbo.astro';
 import { casasDisponiveis, meta } from '../lib/dados';
 import { dataLonga, num } from '../lib/formatar';
+import { DEFINICAO_CATEGORIA, ORDEM_TEMAS, ROTULO_TEMA } from '../lib/categorias';
 
 const casas = casasDisponiveis().map((c) => meta(c));
 const exemplos = [
@@ -41,7 +42,7 @@ const exemplos = [
     </p>
     <ul class="exemplos">
       {exemplos.map((e) => (
-        <li><Carimbo categoria={e.c} /><span>{e.t}</span></li>
+        <li><Carimbo categoria={e.c} /><span><strong>{DEFINICAO_CATEGORIA[e.c]}</strong> Exemplo: “{e.t}”</span></li>
       ))}
     </ul>
     <p>
@@ -49,8 +50,27 @@ const exemplos = [
       em listas temáticas, e usamos a lista dela. Nas demais, uma regra lê a ementa e procura frases como
       “dá o nome de … a um logradouro”, “declara patrimônio cultural”, “polo gastronômico”, “cidade-irmã”,
       “concede o título de cidadão”. Comparando a regra com as listas da Câmara, as duas concordam em 98%
-      das leis. O que não cai em nenhuma categoria fica como <strong>demais leis</strong>, mesmo que seja
+      das leis. O que não cai em nenhuma categoria fica como <strong>regras e políticas</strong>, mesmo que seja
       uma campanha de conscientização sem efeito prático: a regra só afirma o que a ementa diz com todas as letras.
+    </p>
+
+    <h2 class="display">Tema das regras e políticas</h2>
+    <p>
+      As leis e projetos que não são simbólicos ganham um tema: {ORDEM_TEMAS.filter((t) => t !== 'outros').map((t) => ROTULO_TEMA[t].toLowerCase()).join(', ')}.
+      Cada tema tem uma lista de palavras procuradas na ementa (“hospital”, “vacina” e “UPA” são saúde;
+      “ônibus”, “BRT” e “estacionamento” são transporte). Ganha o tema com mais palavras encontradas e, no
+      empate, o que aparece primeiro, que costuma ser o assunto principal. Quando a ementa só diz “altera a
+      Lei nº tal”, lemos o começo do texto da lei. Cada lei fica com um tema só, mesmo quando trata de dois
+      (uma lei sobre autismo nas escolas conta como educação ou direitos, não como as duas). O que não se
+      encaixa fica como “outros”: cerca de 1% das leis e 14% dos projetos, quase sempre ementas que só
+      remetem a outra lei.
+    </p>
+
+    <h2 class="display">Mandatos e projetos</h2>
+    <p>
+      Na ficha de quem passou por mais de um mandato no período, dá para ver cada mandato separado. Uma lei
+      conta no mandato em que foi publicada; um projeto, no mandato em que foi protocolado. Na Câmara do
+      Rio, o projeto aparece como “virou lei” quando a ficha da lei aponta para ele como projeto de origem.
     </p>
     <p>
       Tombamento é um caso de fronteira: tem efeito jurídico sobre o imóvel, mas entra na mesma família de
@@ -75,7 +95,7 @@ const exemplos = [
     <ul>
       <li>As votações simbólicas (a maioria) não registram quem votou o quê e não aparecem aqui.</li>
       <li>Os nomes dos autores são casados por texto; ex-{casas[0]?.membros ?? 'parlamentares'} de antes de {casas[0]?.ano_inicial} aparecem sem ficha.</li>
-      <li>A classificação lê só a ementa. Uma lei com ementa vaga pode estar na categoria errada; se achar uma, avise.</li>
+      <li>A classificação lê só a ementa. Uma lei com ementa vaga pode estar na categoria ou no tema errado; se achar uma, avise.</li>
     </ul>
     <p class="rubrica">{num(casas.reduce((a, m) => a + m.leis.total, 0))} leis classificadas.</p>
   </article>

@@ -6,7 +6,10 @@ utilidade pública, patrimônio ou homenagem?
 
 O site mostra, para cada vereador e deputado estadual:
 
-- as leis aprovadas (Câmara) ou os projetos apresentados (ALERJ), classificados pela ementa;
+- as leis aprovadas (Câmara) e os projetos de lei protocolados (Câmara e ALERJ), classificados pela
+  ementa: as cinco categorias simbólicas e, no resto ("regras e políticas"), o tema (saúde, educação,
+  transporte...); na Câmara, cada projeto que virou lei aponta para a lei;
+- tudo separado por mandato, para quem passou por mais de uma legislatura;
 - o **peso real** da autoria (uma lei com 20 coautores vale 1/20 para cada um);
 - requerimentos de informação (fiscalização), títulos e medalhas, moções;
 - presença e votos nas votações nominais;
@@ -31,7 +34,9 @@ fontes públicas ──► vendor/como-votou   (Tomoyo: vereadores, proposiçõe
 - `pipeline/` (Python, só biblioteca padrão) lê a base de leis da Câmara, classifica cada lei e
   monta os JSON do site. A classificação está em `pipeline/observatorio/classificar.py`: para nome
   de rua, calendário e utilidade pública usa as listas temáticas da própria Câmara; no resto, regras
-  sobre a ementa (concordam com as listas da Câmara em 98% das leis).
+  sobre a ementa (concordam com as listas da Câmara em 98% das leis). O tema das leis e projetos que
+  não são simbólicos sai de `pipeline/observatorio/temas.py` (palavras-chave por tema; ganha o tema
+  com mais palavras na ementa).
 - `site/` é um site estático em [Astro](https://astro.build): uma página por parlamentar e por votação.
 
 ## Rodar na máquina

@@ -3,7 +3,7 @@ import Base from '../../layouts/Base.astro';
 import Carimbo from '../../components/Carimbo.astro';
 import BarraCategorias from '../../components/BarraCategorias.astro';
 import { casasDisponiveis, meta, leis, type Casa } from '../../lib/dados';
-import { ORDEM_CATEGORIAS } from '../../lib/categorias';
+import { ORDEM_CATEGORIAS, ORDEM_TEMAS, ROTULO_TEMA } from '../../lib/categorias';
 import { u, num, dataCurta, rotuloNorma, ROTULO_CURTO } from '../../lib/formatar';
 
 export function getStaticPaths() {
@@ -14,6 +14,9 @@ const m = meta(casa);
 const lista = leis(casa).filter((l) => l.tipo === 'LEI' || l.tipo === 'LC');
 const anos = [...new Set(lista.map((l) => l.ano))].sort((a, b) => b - a);
 const MAX_AUTORES = 4;
+const porTema = m.leis.por_tema ?? {};
+const temas = ORDEM_TEMAS.filter((t) => porTema[t])
+  .sort((a, b) => Number(a === 'outros') - Number(b === 'outros') || porTema[b] - porTema[a]);
 ---
 <Base casa={casa} titulo={`Todas as leis · ${m.curto}`}>
   <div class="envelope">
@@ -38,6 +41,13 @@ const MAX_AUTORES = 4;
           </select>
         </div>
         <div class="campo">
+          <label class="rubrica" for="tema">Tema</label>
+          <select id="tema" name="tema">
+            <option value="">todos</option>
+            {temas.map((t) => <option value={t}>{ROTULO_TEMA[t]} ({num(porTema[t])})</option>)}
+          </select>
+        </div>
+        <div class="campo">
           <label class="rubrica" for="ano">Ano</label>
           <select id="ano" name="ano">
             <option value="">todos</option>
@@ -52,12 +62,14 @@ const MAX_AUTORES = 4;
           const pessoas = l.autores.filter((a) => !a.inst);
           const autoresTexto = l.autores.map((a) => a.nome).join(' ');
           return (
-            <li data-cat={l.categoria} data-simb={String(l.simbolica)} data-ano={l.ano}
+            <li data-cat={l.categoria} data-simb={String(l.simbolica)} data-ano={l.ano} data-tema={l.tema ?? ''}
                 data-texto={`${l.ementa} ${autoresTexto}`.toLowerCase()}>
               <div class="meta">
                 <a class="rubrica" href={l.url} rel="noopener">{rotuloNorma(l.id)}</a>
                 <span class="rubrica data">{l.data ? dataCurta(l.data) : l.ano}</span>
-                <Carimbo categoria={l.categoria} pequeno />
+                {l.simbolica || !l.tema
+                  ? <Carimbo categoria={l.categoria} pequeno />
+                  : <Carimbo texto={ROTULO_TEMA[l.tema]} tom="tinta" pequeno />}
               </div>
               <p class="ementa">{l.ementa}</p>
               <p class="autores">
@@ -78,7 +90,7 @@ const MAX_AUTORES = 4;
 
 <style>
   h1 { font-size: clamp(44px, 8vw, 84px); margin: 0; }
-  .filtros { display: grid; grid-template-columns: 2fr 1fr 1fr auto; gap: 12px; align-items: end; margin: 28px 0 12px;
+  .filtros { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr auto; gap: 12px; align-items: end; margin: 28px 0 12px;
     position: sticky; top: 0; background: var(--papel); padding: 10px 0; z-index: 5; border-bottom: 1px solid var(--linha); }
   .campo { display: grid; gap: 4px; min-width: 0; }
   input, select { font: inherit; font-size: 16px; padding: 9px 10px; background: var(--papel-2); color: var(--tinta); border: 1.5px solid var(--tinta); border-radius: 0; min-width: 0; }
@@ -107,11 +119,13 @@ const MAX_AUTORES = 4;
     const q = String(f.get('q') ?? '').trim().toLowerCase();
     const cat = String(f.get('cat') ?? '');
     const ano = String(f.get('ano') ?? '');
+    const tema = String(f.get('tema') ?? '');
     let n = 0;
     for (const li of itens) {
       const ok = (!q || li.dataset.texto!.includes(q))
         && (!cat || (cat === 'simbolica' ? li.dataset.simb === 'true' : li.dataset.cat === cat))
-        && (!ano || li.dataset.ano === ano);
+        && (!ano || li.dataset.ano === ano)
+        && (!tema || li.dataset.tema === tema);
       li.hidden = !ok;
       if (ok) n++;
     }
