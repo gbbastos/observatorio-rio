@@ -1,0 +1,13 @@
+---
+import Base from '../../layouts/Base.astro';
+import CasaHome from '../../components/CasaHome.astro';
+import { casasDisponiveis, meta, type Casa } from '../../lib/dados';
+
+export function getStaticPaths() {
+  return casasDisponiveis().map((casa) => ({ params: { casa } }));
+}
+const casa = Astro.params.casa as Casa;
+---
+<Base casa={casa} titulo={casa === 'camara' ? undefined : meta(casa).curto}>
+  <CasaHome casa={casa} />
+</Base>

@@ -1,0 +1,38 @@
+---
+// Carimbo de cartório com a categoria da lei. Vermelho para as simbólicas, tinta para o resto.
+import { ROTULO_CURTO } from '../lib/formatar';
+
+interface Props { categoria?: string | null; texto?: string; tom?: 'vermelho' | 'tinta'; pequeno?: boolean }
+const { categoria, texto, tom, pequeno = false } = Astro.props;
+const rotulo = texto ?? (categoria ? ROTULO_CURTO[categoria] ?? categoria : '');
+const cor = tom ?? (categoria && categoria !== 'normativa' ? 'vermelho' : 'tinta');
+// inclinação estável por texto, para os carimbos não parecerem todos iguais
+let h = 0;
+for (const c of rotulo) h = (h * 17 + c.charCodeAt(0)) % 7;
+const giro = (h - 3) * 0.6;
+---
+{rotulo && (
+  <span class:list={['carimbo', cor, { pequeno }]} style={`--giro:${giro}deg`}>{rotulo}</span>
+)}
+
+<style>
+  .carimbo {
+    display: inline-block;
+    font-family: var(--f-mono);
+    font-weight: 700;
+    font-size: 12px;
+    line-height: 1;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 5px 7px 4px;
+    border: 2px solid currentColor;
+    border-radius: 3px;
+    transform: rotate(var(--giro));
+    white-space: nowrap;
+    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='40'%3E%3Cfilter id='r'%3E%3CfeTurbulence baseFrequency='0.9' numOctaves='2'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 -2.2 1.9'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23r)'/%3E%3C/svg%3E");
+    mask-size: 120px 40px;
+  }
+  .vermelho { color: var(--carimbo); }
+  .tinta { color: var(--tinta-2); }
+  .pequeno { font-size: 10px; padding: 3px 5px 2px; border-width: 1.5px; }
+</style>

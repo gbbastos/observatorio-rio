@@ -1,0 +1,2 @@
+# Só a etapa de resumo (observatorio.resumir) usa dependências externas; o resto do pipeline é stdlib.
+anthropic==1.13.0

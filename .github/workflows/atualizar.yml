@@ -1,0 +1,108 @@
+# Atualiza os dados e publica o site no GitHub Pages.
+# Roda a cada dois dias de madrugada (horário do Rio) e quando alguém clica em "Run workflow".
+# As respostas brutas das fontes ficam em cache entre as rodadas, então só o que mudou vai à rede.
+name: Atualizar dados e publicar
+
+on:
+  schedule:
+    - cron: '0 8 */2 * *'   # 05:00 no Rio
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: atualizar
+  cancel-in-progress: false
+
+jobs:
+  atualizar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    env:
+      TEM_CHAVE_IA: ${{ secrets.ANTHROPIC_API_KEY != '' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Cache das respostas brutas
+        uses: actions/cache@v4
+        with:
+          path: |
+            vendor/como-votou/data
+            vendor/assembleias/data
+            data/raw
+            data/cache
+          key: brutos-${{ github.run_id }}
+          restore-keys: brutos-
+
+      - name: Instalar a coleta da Tomoyo
+        run: |
+          pip install -e vendor/como-votou/backend
+          pip install -e vendor/assembleias/backend
+
+      - name: Coletar Câmara do Rio (Tomoyo)
+        working-directory: vendor/como-votou/backend
+        run: |
+          python -m app.etl.export_snapshot --all
+          python -m app.etl.export_static_frontend
+
+      - name: Coletar ALERJ (Tomoyo)
+        working-directory: vendor/assembleias/backend
+        continue-on-error: true   # se a ALERJ falhar, o site sai com o último dado da ALERJ no repositório
+        run: |
+          python -m app.etl.export_snapshot --uf RJ --all
+          python -m app.etl.export_static_frontend --uf RJ
+
+      - name: Coletar leis da Câmara
+        working-directory: pipeline
+        run: python -m observatorio.coletar
+
+      - name: Resumir leis novas com IA
+        if: env.TEM_CHAVE_IA == 'true'
+        working-directory: pipeline
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          pip install -r requirements-ia.txt
+          python -m observatorio.resumir
+
+      - name: Montar os dados do site
+        working-directory: pipeline
+        run: python -m observatorio.montar
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+
+      - name: Construir o site
+        working-directory: site
+        env:
+          SITE_URL: https://${{ github.repository_owner }}.github.io
+          SITE_BASE: /${{ github.event.repository.name }}/
+        run: |
+          npm ci
+          npm run build
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site/dist
+
+  publicar:
+    needs: atualizar
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v4

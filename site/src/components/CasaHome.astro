@@ -1,0 +1,276 @@
+---
+// Página inicial de uma casa: manchete, plenário, rankings, leis coletivas e últimas votações.
+import Plenario, { type AssentoDado, type Modo } from './Plenario.astro';
+import BarraCategorias from './BarraCategorias.astro';
+import Carimbo from './Carimbo.astro';
+import { meta, bancada, leis, votacoes, votacao, type Casa, type Parlamentar } from '../lib/dados';
+import { corPartido } from '../lib/partidos';
+import { corSimbolica, corPresenca } from '../lib/categorias';
+import { ordenarPorBancada } from '../lib/plenario';
+import { u, num, pct, dataCurta, ementa, rotuloNorma } from '../lib/formatar';
+
+interface Props { casa: Casa }
+const { casa } = Astro.props;
+const m = meta(casa);
+const atuais = bancada(casa);
+const ordem = ordenarPorBancada(atuais, (p) => p.partido ?? '?', (p) => p.nome);
+const ficha = (p: Parlamentar) => u(`/${casa}/${p.slug}/`);
+const anoLeg = Number(m.legislatura_atual.inicio.slice(0, 4));
+
+// Com base de leis (Câmara), conta o que foi aprovado; sem ela (ALERJ), o que foi apresentado.
+const temLeis = m.tem_leis;
+const base = temLeis ? m.leis : m.projetos;
+const basePorAno = temLeis ? m.leis_por_ano : m.projetos_por_ano;
+const oQue = temLeis ? 'leis aprovadas' : 'projetos de lei apresentados';
+const unidade = temLeis ? 'leis' : 'projetos';
+const totalDe = (p: Parlamentar) => (temLeis ? p.leis.total : p.proposicoes.pl);
+const simbDe = (p: Parlamentar) => (temLeis ? p.leis.simbolicas : p.proposicoes.pl_simbolicos);
+const honrariasDe = (p: Parlamentar) => (temLeis ? p.titulos : p.proposicoes.honrarias);
+const FRASE: Record<string, string> = {
+  calendario: 'data comemorativa', logradouro: 'nome de rua', patrimonio: 'patrimônio ou polo turístico',
+  utilidade_publica: 'utilidade pública', honraria: 'homenagem',
+};
+const topSimb = Object.entries(base.por_categoria).filter(([c]) => c !== 'normativa')
+  .sort((a, b) => b[1] - a[1]).slice(0, 3);
+const fraseCategorias = topSimb.map(([c]) => FRASE[c]).join(', ').replace(/, ([^,]*)$/, ' ou $1');
+const DETALHE: Record<string, string> = {
+  calendario: 'incluem datas no calendário oficial', logradouro: 'dão nome a ruas e lugares',
+  patrimonio: 'declaram patrimônio, polo gastronômico ou roteiro turístico',
+  utilidade_publica: 'declaram entidades de utilidade pública', honraria: 'concedem homenagens',
+};
+
+// --- modos do plenário ---------------------------------------------------------------------
+const bancadas = new Map<string, number>();
+for (const p of atuais) bancadas.set(p.partido ?? '?', (bancadas.get(p.partido ?? '?') ?? 0) + 1);
+const participacoes = atuais.map((p) => p.votacoes.participacao).filter((x): x is number => x != null);
+const mediaPart = participacoes.reduce((a, b) => a + b, 0) / (participacoes.length || 1);
+
+const modos: Modo[] = [
+  {
+    id: 'partido', rotulo: 'Partido',
+    legenda: [...bancadas].sort((a, b) => b[1] - a[1]).map(([s, n]) => ({ cor: corPartido(s), texto: `${s} ${n}` })),
+    centro: { grande: String(atuais.length), pequeno: m.membros },
+  },
+  {
+    id: 'producao', rotulo: temLeis ? 'Leis simbólicas' : 'Projetos simbólicos',
+    legenda: [
+      { cor: corSimbolica(0), texto: 'quase nada simbólico' }, { cor: corSimbolica(0.5), texto: 'metade' },
+      { cor: corSimbolica(1), texto: 'quase tudo simbólico' }, { cor: '', texto: `nenhum${temLeis ? 'a lei' : ' projeto'}`, vazio: true },
+    ],
+    centro: { grande: `${pct(base.simbolicas, base.total)}%`, pequeno: `dos ${unidade} são simbólicos` },
+  },
+  {
+    id: 'presenca', rotulo: 'Presença',
+    legenda: [
+      { cor: corPresenca(0.1), texto: 'até 20%' }, { cor: corPresenca(0.5), texto: '40–60%' },
+      { cor: corPresenca(0.95), texto: 'mais de 80%' }, { cor: '', texto: 'sem votações', vazio: true },
+    ],
+    centro: { grande: `${Math.round(mediaPart * 100)}%`, pequeno: 'presença média nas votações' },
+  },
+];
+
+const assentos: AssentoDado[] = ordem.map((p) => {
+  const total = totalDe(p);
+  const simb = simbDe(p);
+  const part = p.votacoes.participacao;
+  return {
+    id: p.id, nome: p.nome, partido: p.partido ?? '?', foto: p.foto, href: ficha(p),
+    valores: {
+      partido: { cor: corPartido(p.partido), texto: `Bancada do ${p.partido}` },
+      producao: total
+        ? { cor: corSimbolica(simb / total), texto: `${num(total)} ${oQue} desde ${m.ano_inicial}; ${num(simb)} simbólicos (${pct(simb, total)}%)` }
+        : { cor: '', texto: `Nenhum registro de ${oQue} desde ${m.ano_inicial}`, vazio: true },
+      presenca: part != null
+        ? { cor: corPresenca(part), texto: `Votou em ${Math.round(part * 100)}% das votações nominais do mandato` }
+        : { cor: '', texto: 'Sem votações nominais registradas', vazio: true },
+    },
+  };
+});
+
+const ultimas = votacoes(casa).filter((v) => (v.legislatura ?? 0) === m.legislatura_atual.numero).slice(0, 40);
+const opcoesVotacao = ultimas.map((v) => ({
+  id: v.id, href: u(`/${casa}/votacoes/${v.id}/`),
+  rotulo: `${dataCurta(v.data)} · ${v.proposicao.id ? rotuloNorma(v.proposicao.id) : 'votação'} · ${ementa(v.proposicao.ementa).slice(0, 90)}`,
+  votos: votacao(casa, v.id).votos,
+}));
+
+// --- rankings ------------------------------------------------------------------------------
+const top = (f: (p: Parlamentar) => number, n = 6) =>
+  [...atuais].filter((p) => f(p) > 0).sort((a, b) => f(b) - f(a) || a.nome.localeCompare(b.nome)).slice(0, n);
+const rankings = [
+  { titulo: 'Fábrica de homenagem', sub: `${temLeis ? 'leis simbólicas aprovadas' : 'projetos simbólicos apresentados'} desde ${m.ano_inicial}`,
+    lista: top(simbDe), valor: (p: Parlamentar) => num(simbDe(p)), extra: (p: Parlamentar) => `de ${num(totalDe(p))} ${unidade}` },
+  { titulo: 'Quem mais fiscaliza', sub: 'requerimentos de informação ao Executivo', lista: top((p) => p.proposicoes.reqinf),
+    valor: (p: Parlamentar) => num(p.proposicoes.reqinf), extra: () => 'pedidos' },
+  { titulo: temLeis ? 'Título de cidadão' : 'Medalha e título', sub: temLeis ? 'títulos e medalhas concedidos por decreto' : 'títulos, medalhas e diplomas propostos',
+    lista: top(honrariasDe), valor: (p: Parlamentar) => num(honrariasDe(p)), extra: () => 'honrarias' },
+  temLeis
+    ? { titulo: 'Peso real', sub: 'demais leis, cada uma dividida pelo nº de autores', lista: top((p) => p.leis.peso_normativas),
+        valor: (p: Parlamentar) => num(p.leis.peso_normativas, 1), extra: (p: Parlamentar) => `de ${num(p.leis.total - p.leis.simbolicas)} com o nome` }
+    : { titulo: 'Moção', sub: 'moções de aplauso, louvor e repúdio', lista: top((p) => p.proposicoes.mocoes),
+        valor: (p: Parlamentar) => num(p.proposicoes.mocoes), extra: () => 'moções' },
+];
+
+const coletivas = leis(casa)
+  .filter((l) => (l.tipo === 'LEI' || l.tipo === 'LC') && l.ano >= anoLeg && l.n_autores >= 8)
+  .sort((a, b) => b.n_autores - a.n_autores)
+  .slice(0, 5);
+
+const anos = Object.entries(basePorAno).sort((a, b) => Number(a[0]) - Number(b[0]));
+const pctGeral = pct(base.simbolicas, base.total);
+---
+<section class="manchete envelope surge">
+  <div class="manchete-numero numero-gigante vermelho">{pctGeral}<span>%</span></div>
+  <div class="manchete-texto">
+    <p class="rubrica">{m.nome} · {oQue} desde {m.ano_inicial}</p>
+    <h1 class="display">
+      d{temLeis ? 'as' : 'os'} {num(base.total)} {oQue} são {fraseCategorias}
+    </h1>
+    <p class="lead">
+      {temLeis
+        ? <>Quando um {m.membro} diz que “aprovou 100 leis”, vale perguntar quais. Separamos cada lei pelo que a ementa diz:{' '}</>
+        : <>A {m.curto} não deixa ler a sua base de leis aprovadas de forma automática; por isso, aqui contamos o que cada {m.membro} <em>propõe</em>, pela ementa de cada projeto:{' '}</>}
+      {topSimb.map(([c, n], i) => (
+        <>{num(n)} {DETALHE[c]}{i < topSimb.length - 1 ? ', ' : '.'}</>
+      ))}
+    </p>
+    <BarraCategorias porCategoria={base.por_categoria} alta />
+  </div>
+</section>
+
+<section class="secao envelope" id="plenario">
+  <header>
+    <h2 class="display">O plenário</h2>
+    <span class="rubrica">{m.curto} · {m.legislatura_atual.numero}ª legislatura ({m.legislatura_atual.inicio.slice(0, 4)}–{m.legislatura_atual.fim.slice(0, 4)})</span>
+  </header>
+  <Plenario assentos={assentos} modos={modos} votacoes={opcoesVotacao}
+            rotuloAria={`Plenário da ${m.nome} com ${atuais.length} cadeiras`} />
+</section>
+
+<section class="secao envelope">
+  <header>
+    <h2 class="display">Quem faz o quê</h2>
+    <span class="rubrica">só quem está no mandato hoje</span>
+  </header>
+  <div class="rankings">
+    {rankings.map((r) => (
+      <article class="ranking">
+        <h3 class="display">{r.titulo}</h3>
+        <p class="rubrica">{r.sub}</p>
+        <ol>
+          {r.lista.map((p, i) => (
+            <li>
+              <span class="pos">{i + 1}</span>
+              {p.foto ? <img src={u(`/${p.foto}`)} alt="" loading="lazy" width="40" height="48" /> : <span class="sem-foto"></span>}
+              <a href={ficha(p)} class="nome">{p.nome}<small>{p.partido}</small></a>
+              <span class="valor"><strong>{r.valor(p)}</strong><small>{r.extra(p)}</small></span>
+            </li>
+          ))}
+        </ol>
+      </article>
+    ))}
+  </div>
+</section>
+
+<section class="secao envelope">
+  <header>
+    <h2 class="display">Ano a ano</h2>
+    <span class="rubrica">{temLeis ? 'leis ordinárias e complementares' : 'projetos de lei apresentados'}, por categoria</span>
+  </header>
+  <div class="anos">
+    {anos.map(([ano, r]) => (
+      <div class="ano">
+        <span class="display ano-rotulo">{ano}</span>
+        <BarraCategorias porCategoria={r.por_categoria} legenda={false} />
+        <span class="rubrica">{num(r.total)} {unidade} · <span class="vermelho">{pct(r.simbolicas, r.total)}% simbólic{temLeis ? 'as' : 'os'}</span></span>
+      </div>
+    ))}
+  </div>
+</section>
+
+{coletivas.length > 0 && (
+  <section class="secao envelope">
+    <header>
+      <h2 class="display">Todo mundo assina</h2>
+      <span class="rubrica">leis deste mandato com mais coautores</span>
+    </header>
+    <ul class="coletivas">
+      {coletivas.map((l) => (
+        <li>
+          <span class="numero-gigante n-autores">{l.n_autores}</span>
+          <div>
+            <p class="rubrica">{rotuloNorma(l.id)} · {l.n_autores} {m.membros} assinam <Carimbo categoria={l.categoria} pequeno /></p>
+            <p class="ementa">{l.ementa}</p>
+            <p class="autores">{l.autores.filter((a) => !a.inst).map((a, i, arr) => (
+              <>{a.slug ? <a href={u(`/${casa}/${a.slug}/`)}>{a.nome}</a> : a.nome}{i < arr.length - 1 ? ', ' : ''}</>
+            ))}</p>
+          </div>
+        </li>
+      ))}
+    </ul>
+  </section>
+)}
+
+<section class="secao envelope">
+  <header>
+    <h2 class="display">Últimas votações</h2>
+    <a class="rubrica" href={u(`/${casa}/votacoes/`)}>todas as {num(m.votacoes)} votações nominais →</a>
+  </header>
+  <ul class="votacoes">
+    {ultimas.slice(0, 6).map((v) => (
+      <li>
+        <a href={u(`/${casa}/votacoes/${v.id}/`)}>
+          <span class="rubrica">{dataCurta(v.data)} · {v.proposicao.id ? rotuloNorma(v.proposicao.id) : v.objeto}</span>
+          <span class="ementa">{ementa(v.proposicao.ementa)}</span>
+          <span class="placar">
+            <strong class:list={[v.resultado === 'aprovado' ? 'ok' : 'nao']}>{v.resultado ?? '—'}</strong>
+            {v.contagem && <span>{v.contagem.sim} sim · {v.contagem.nao} não</span>}
+          </span>
+        </a>
+      </li>
+    ))}
+  </ul>
+  {temLeis && <p class="mais"><a class="botao" href={u(`/${casa}/leis/`)}>Ver todas as leis classificadas →</a></p>}
+</section>
+
+<style>
+  .manchete { display: grid; grid-template-columns: auto 1fr; gap: clamp(16px, 4vw, 48px); align-items: start; margin-top: clamp(28px, 6vw, 64px); }
+  .manchete-numero { font-size: clamp(130px, 27vw, 330px); letter-spacing: -0.03em; }
+  .manchete-numero span { font-size: 0.45em; vertical-align: top; margin-left: 4px; }
+  .manchete h1 { font-size: clamp(34px, 5.4vw, 66px); margin: 6px 0 16px; }
+  .lead { font-size: clamp(18px, 2vw, 21px); max-width: 60ch; margin: 0 0 22px; color: var(--tinta-2); }
+  .rankings { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 28px 32px; }
+  .ranking h3 { font-size: 30px; margin: 0; }
+  .ranking > .rubrica { margin: 4px 0 12px; font-size: 12px; min-height: 2.6em; }
+  .ranking ol { list-style: none; margin: 0; padding: 0; border-top: 1.5px solid var(--tinta); }
+  .ranking li { display: grid; grid-template-columns: 20px 40px 1fr auto; gap: 10px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--linha); }
+  .pos { font-family: var(--f-display); font-weight: 900; font-size: 22px; color: var(--tinta-3); }
+  .ranking img, .sem-foto { width: 40px; height: 48px; object-fit: cover; filter: grayscale(1) contrast(1.1); background: var(--papel-3); }
+  .nome { font-family: var(--f-display); font-weight: 700; font-size: 21px; line-height: 1; text-transform: uppercase; text-decoration: none; }
+  .nome small, .valor small { display: block; font-family: var(--f-mono); font-size: 11px; color: var(--tinta-3); text-transform: uppercase; margin-top: 3px; font-weight: 400; }
+  .valor { text-align: right; }
+  .valor strong { font-family: var(--f-display); font-weight: 900; font-size: 28px; line-height: 1; }
+  .anos { display: grid; gap: 14px; }
+  .ano { display: grid; grid-template-columns: 70px 1fr 220px; gap: 16px; align-items: center; }
+  .ano-rotulo { font-size: 30px; }
+  .coletivas { list-style: none; margin: 0; padding: 0; }
+  .coletivas li { display: grid; grid-template-columns: 110px 1fr; gap: 20px; padding: 18px 0; border-bottom: 1px solid var(--linha); }
+  .n-autores { font-size: 96px; color: var(--carimbo); text-align: right; }
+  .coletivas .ementa { font-size: 20px; margin: 6px 0; }
+  .autores { font-size: 15px; color: var(--tinta-2); margin: 0; }
+  .votacoes { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 0 32px; }
+  .votacoes a { display: grid; gap: 4px; padding: 14px 0; border-bottom: 1px solid var(--linha); text-decoration: none; }
+  .votacoes .ementa { font-size: 17px; line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+  .placar { font-family: var(--f-mono); font-size: 13px; display: flex; gap: 10px; text-transform: uppercase; }
+  .placar .ok { color: var(--verde); }
+  .placar .nao { color: var(--carimbo); }
+  .mais { margin-top: 28px; }
+  @media (max-width: 720px) {
+    .manchete { grid-template-columns: 1fr; }
+    .manchete-numero { margin-bottom: -10px; }
+    .ano { grid-template-columns: 56px 1fr; }
+    .ano .rubrica { grid-column: 2; margin-top: -8px; }
+    .coletivas li { grid-template-columns: 64px 1fr; gap: 12px; }
+    .n-autores { font-size: 60px; }
+  }
+</style>

@@ -1,0 +1,93 @@
+---
+import Base from '../layouts/Base.astro';
+import Carimbo from '../components/Carimbo.astro';
+import { casasDisponiveis, meta } from '../lib/dados';
+import { dataLonga, num } from '../lib/formatar';
+
+const casas = casasDisponiveis().map((c) => meta(c));
+const exemplos = [
+  { c: 'calendario', t: 'Inclui o Dia Municipal do Tutor de Animais de Estimação no Calendário Oficial da Cidade.' },
+  { c: 'logradouro', t: 'Dá o nome de Dr. Cleomar Paredes (1927-2025) a um logradouro no Município.' },
+  { c: 'utilidade_publica', t: 'Inclui na Lei nº 5.242/2011 o Instituto Cultural Zé Pretinho como de utilidade pública.' },
+  { c: 'patrimonio', t: 'Inclui no Guia Oficial e no Roteiro Turístico e Cultural do Município o Restaurante Bosque da Praça.' },
+  { c: 'honraria', t: 'Inclui na Lei nº 5.919/2015 a Cidade de Évora, em Portugal, como cidade-irmã do Rio de Janeiro.' },
+];
+---
+<Base titulo="Como os números são feitos">
+  <article class="envelope texto">
+    <p class="rubrica">Método</p>
+    <h1 class="display">Como os números são feitos</h1>
+
+    <h2 class="display">De onde vêm os dados</h2>
+    <p>
+      Tudo aqui é dado público. A lista de vereadores, os projetos protocolados, as votações nominais e a
+      frequência vêm do projeto aberto <a href="https://github.com/Tomoyo-Computer-Science-Research-Unit/como-votou">como-votou</a>,
+      da Tomoyo, que lê o site e as bases Lotus Domino da Câmara. As <strong>leis aprovadas</strong> vêm da
+      base de legislação da própria Câmara, que lemos à parte: número, ano, autores, situação (em vigor,
+      revogada, declarada inconstitucional) e, quando a ficha da lei está disponível, a data e o projeto de origem.
+    </p>
+    <ul class="fontes">
+      {casas.map((m) => (
+        <li><strong>{m.nome}</strong>: dados atualizados em {dataLonga(m.atualizado_em)}, desde {m.ano_inicial}.
+          {m.fontes.map((f) => <> <a href={f.url}>{f.nome}</a>.</>)}
+        </li>
+      ))}
+    </ul>
+
+    <h2 class="display">Lei simbólica</h2>
+    <p>
+      Chamamos de <strong>simbólica</strong> a lei que reconhece, homenageia ou inclui algo numa lista, sem
+      criar uma obrigação ou um serviço novo. São cinco tipos:
+    </p>
+    <ul class="exemplos">
+      {exemplos.map((e) => (
+        <li><Carimbo categoria={e.c} /><span>{e.t}</span></li>
+      ))}
+    </ul>
+    <p>
+      Para leis de nome de rua, de calendário e de utilidade pública, a própria Câmara já separa as leis
+      em listas temáticas, e usamos a lista dela. Nas demais, uma regra lê a ementa e procura frases como
+      “dá o nome de … a um logradouro”, “declara patrimônio cultural”, “polo gastronômico”, “cidade-irmã”,
+      “concede o título de cidadão”. Comparando a regra com as listas da Câmara, as duas concordam em 98%
+      das leis. O que não cai em nenhuma categoria fica como <strong>demais leis</strong>, mesmo que seja
+      uma campanha de conscientização sem efeito prático: a regra só afirma o que a ementa diz com todas as letras.
+    </p>
+    <p>
+      Tombamento é um caso de fronteira: tem efeito jurídico sobre o imóvel, mas entra na mesma família de
+      reconhecimento cultural e foi contado como patrimônio.
+    </p>
+
+    <h2 class="display">Coautoria e peso real</h2>
+    <p>
+      Uma lei pode ter um autor ou vinte. Na ficha de cada {casas[0]?.membro ?? 'parlamentar'}, “leis aprovadas”
+      conta todas as leis em que o nome aparece. O <strong>peso real</strong> divide cada lei pelo número de
+      autores: uma lei assinada por 20 vale 0,05 para cada um; uma lei de autor único vale 1.
+    </p>
+
+    <h2 class="display">Presença</h2>
+    <p>
+      A Câmara do Rio não publica a lista de presença de cada sessão, só o total de faltas por mês. Por isso
+      mostramos duas coisas: as faltas mensais que a Câmara publica, e a <strong>presença nas votações
+      nominais</strong>, a fração das votações nominais do mandato em que o nome aparece votando.
+    </p>
+
+    <h2 class="display">Limites</h2>
+    <ul>
+      <li>As votações simbólicas (a maioria) não registram quem votou o quê e não aparecem aqui.</li>
+      <li>Os nomes dos autores são casados por texto; ex-{casas[0]?.membros ?? 'parlamentares'} de antes de {casas[0]?.ano_inicial} aparecem sem ficha.</li>
+      <li>A classificação lê só a ementa. Uma lei com ementa vaga pode estar na categoria errada; se achar uma, avise.</li>
+    </ul>
+    <p class="rubrica">{num(casas.reduce((a, m) => a + m.leis.total, 0))} leis classificadas.</p>
+  </article>
+</Base>
+
+<style>
+  .texto { max-width: 820px; }
+  h1 { font-size: clamp(48px, 9vw, 96px); margin: 8px 0 28px; }
+  h2 { font-size: 34px; margin: 48px 0 12px; border-top: 3px solid var(--tinta); padding-top: 10px; }
+  p, li { font-size: 19px; }
+  .fontes li { margin-bottom: 8px; }
+  .exemplos { list-style: none; padding: 0; display: grid; gap: 14px; }
+  .exemplos li { display: grid; grid-template-columns: 190px 1fr; gap: 16px; align-items: start; }
+  @media (max-width: 600px) { .exemplos li { grid-template-columns: 1fr; gap: 6px; } }
+</style>

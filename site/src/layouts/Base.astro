@@ -1,0 +1,115 @@
+---
+import '@fontsource/big-shoulders-display/700';
+import '@fontsource/big-shoulders-display/900';
+import '@fontsource/newsreader/400';
+import '@fontsource/newsreader/400-italic';
+import '@fontsource/newsreader/600';
+import '@fontsource/courier-prime/400';
+import '@fontsource/courier-prime/700';
+import '../styles/global.css';
+import { SITE } from '../lib/site';
+import { u, dataLonga } from '../lib/formatar';
+import { casasDisponiveis, meta, type Casa } from '../lib/dados';
+
+interface Props { titulo?: string; descricao?: string; casa?: Casa; imagem?: string | null }
+const { titulo, descricao = SITE.descricao, casa, imagem } = Astro.props;
+const tituloCompleto = titulo ? `${titulo} · ${SITE.nome}` : `${SITE.nome} — ${SITE.slogan}`;
+const casas = casasDisponiveis();
+const atualizacao = casas.map((c) => meta(c).atualizado_em).sort().at(-1) ?? new Date().toISOString();
+const atual = Astro.url.pathname;
+const ativo = (c: Casa) => casa === c;
+const ogImagem = imagem ? new URL(u(`/${imagem}`), Astro.site).href : undefined;
+---
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{tituloCompleto}</title>
+    <meta name="description" content={descricao} />
+    <meta property="og:title" content={tituloCompleto} />
+    <meta property="og:description" content={descricao} />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content={new URL(atual, Astro.site).href} />
+    {ogImagem && <meta property="og:image" content={ogImagem} />}
+    <meta name="twitter:card" content={ogImagem ? 'summary' : 'summary'} />
+    <link rel="icon" href={u('/favicon.svg')} type="image/svg+xml" />
+    <meta name="theme-color" content="#f1ebdd" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#13120f" media="(prefers-color-scheme: dark)" />
+  </head>
+  <body>
+    <header class="cabecalho">
+      <div class="envelope">
+        <div class="linha-topo rubrica">
+          <span>Rio de Janeiro · edição de {dataLonga(atualizacao)}</span>
+          <span class="so-largo">dados públicos, sem partido</span>
+        </div>
+        <hr class="fio" />
+        <div class="titulo-linha">
+          <a href={u('/')} class="logo display" aria-label={`${SITE.nome}, página inicial`}>
+            Fez o <span class="vermelho">quê?</span>
+          </a>
+          <nav class="casas" aria-label="Casas legislativas">
+            {casas.map((c) => (
+              <a href={u(c === 'camara' ? '/' : `/${c}/`)} class:list={['casa-link', { ativo: ativo(c) }]}
+                 aria-current={ativo(c) ? 'page' : undefined}>
+                {meta(c).curto}
+              </a>
+            ))}
+            <a href={u('/sobre/')} class:list={['casa-link', { ativo: atual.includes('/sobre') }]}>Método</a>
+          </nav>
+        </div>
+        <hr class="fio-duplo" />
+        <p class="slogan">{SITE.slogan}.</p>
+      </div>
+    </header>
+
+    <main>
+      <slot />
+    </main>
+
+    <footer class="rodape">
+      <div class="envelope">
+        <hr class="fio-duplo" />
+        <div class="rodape-grade">
+          <p class="display rodape-logo">Fez o <span class="vermelho">quê?</span></p>
+          <div>
+            <p>
+              Feito com dados públicos da Câmara Municipal do Rio e da ALERJ. A coleta de vereadores,
+              proposições, votações e presença é do projeto aberto
+              <a href="https://github.com/Tomoyo-Computer-Science-Research-Unit">Tomoyo</a> (licença MIT);
+              a base de leis, a classificação e este site são nossos.
+            </p>
+            <p class="rubrica">
+              <a href={u('/sobre/')}>Como os números são feitos</a> · Atualizado em {dataLonga(atualizacao)}
+            </p>
+          </div>
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>
+
+<style>
+  .cabecalho { padding-top: 14px; }
+  .linha-topo { display: flex; justify-content: space-between; gap: 12px; padding-bottom: 6px; font-size: 12px; }
+  .titulo-linha { display: flex; align-items: end; justify-content: space-between; gap: 18px; flex-wrap: wrap; padding: 10px 0 12px; }
+  .logo { font-size: clamp(56px, 13vw, 132px); text-decoration: none; color: var(--tinta); letter-spacing: -0.01em; }
+  .logo:hover { color: var(--tinta); }
+  .casas { display: flex; gap: 4px; flex-wrap: wrap; padding-bottom: 8px; }
+  .casa-link {
+    font-family: var(--f-mono); font-size: 14px; text-transform: uppercase; letter-spacing: 0.06em;
+    text-decoration: none; padding: 7px 12px; border: 1.5px solid transparent;
+  }
+  .casa-link:hover { border-color: var(--tinta); color: var(--tinta); }
+  .casa-link.ativo { background: var(--tinta); color: var(--papel); }
+  .slogan { font-style: italic; color: var(--tinta-2); margin: 8px 0 0; font-size: 17px; }
+  .rodape { margin-top: 96px; padding-bottom: 48px; }
+  .rodape-grade { display: grid; grid-template-columns: auto 1fr; gap: 32px; padding-top: 20px; align-items: start; }
+  .rodape-logo { font-size: 44px; margin: 0; }
+  .rodape p { margin: 0 0 10px; color: var(--tinta-2); font-size: 16px; max-width: 70ch; }
+  @media (max-width: 640px) {
+    .so-largo { display: none; }
+    .rodape-grade { grid-template-columns: 1fr; gap: 8px; }
+  }
+</style>

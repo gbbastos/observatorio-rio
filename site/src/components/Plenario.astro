@@ -1,0 +1,246 @@
+---
+// O plenário em semicírculo: uma bolinha por cadeira, a cor muda conforme o modo escolhido.
+// O SVG sai pronto do build (funciona sem JS); o script só troca de modo e mostra o cartão da cadeira.
+import { layoutPlenario, LARGURA, ALTURA } from '../lib/plenario';
+import { u } from '../lib/formatar';
+
+export interface ValorModo { cor: string; texto: string; vazio?: boolean }
+export interface AssentoDado {
+  id: string; nome: string; partido: string; foto?: string | null; href?: string;
+  valores: Record<string, ValorModo>;
+}
+export interface ItemLegenda { cor: string; texto: string; vazio?: boolean }
+export interface Modo { id: string; rotulo: string; legenda: ItemLegenda[]; centro: { grande: string; pequeno: string } }
+export interface VotacaoOpcao { id: string; rotulo: string; href: string; votos: Record<string, string> }
+
+interface Props {
+  assentos: AssentoDado[];
+  modos: Modo[];
+  modoInicial?: string;
+  votacoes?: VotacaoOpcao[];
+  rotuloAria: string;
+}
+const { assentos, modos, modoInicial = modos[0]?.id, votacoes = [], rotuloAria } = Astro.props;
+const pos = layoutPlenario(assentos.length);
+const modo0 = modos.find((m) => m.id === modoInicial) ?? modos[0];
+const dados = {
+  modos: Object.fromEntries(modos.map((m) => [m.id, m])),
+  valores: Object.fromEntries(assentos.map((a) => [a.id, a.valores])),
+  info: Object.fromEntries(assentos.map((a) => [a.id, { nome: a.nome, partido: a.partido, foto: a.foto ? u(`/${a.foto}`) : null, href: a.href }])),
+  votacoes,
+};
+const temVotacao = votacoes.length > 0;
+---
+<figure class="plenario" data-plenario>
+  {(modos.length > 1 || temVotacao) && (
+    <div class="controles" role="group" aria-label="Colorir o plenário por">
+      {modos.map((m) => (
+        <button type="button" class="botao" data-modo={m.id} aria-pressed={m.id === modo0.id ? 'true' : 'false'}>{m.rotulo}</button>
+      ))}
+      {temVotacao && (
+        <button type="button" class="botao" data-modo="votacao" aria-pressed="false">Votação</button>
+      )}
+    </div>
+  )}
+  {temVotacao && (
+    <div class="escolha-votacao" data-escolha hidden>
+      <label class="rubrica" for="sel-votacao">Escolha uma votação nominal</label>
+      <select id="sel-votacao" data-votacao>
+        {votacoes.map((v) => <option value={v.id}>{v.rotulo}</option>)}
+      </select>
+      <a class="rubrica" data-link-votacao href={votacoes[0].href}>ver votação →</a>
+    </div>
+  )}
+
+  <div class="palco">
+    <svg viewBox={`0 0 ${LARGURA} ${ALTURA}`} role="img" aria-label={rotuloAria}>
+      {assentos.map((a, i) => {
+        const v = a.valores[modo0.id];
+        const p = pos[i];
+        return (
+          <a href={a.href} data-id={a.id} aria-label={`${a.nome}, ${a.partido}: ${v?.texto ?? ''}`}>
+            <circle cx={p.x} cy={p.y} r={p.r} class:list={['cadeira', { vazia: v?.vazio }]}
+                    style={`fill:${v?.vazio ? 'transparent' : v?.cor}`} />
+          </a>
+        );
+      })}
+      <text x="100" y="91" text-anchor="middle" class="centro-grande" data-centro-grande>{modo0.centro.grande}</text>
+      <text x="100" y="100" text-anchor="middle" class="centro-pequeno" data-centro-pequeno>{modo0.centro.pequeno}</text>
+    </svg>
+  </div>
+
+  <figcaption>
+    <ul class="legenda" data-legenda>
+      {modo0.legenda.map((l) => (
+        <li><span class:list={['bolinha', { vazia: l.vazio }]} style={`background:${l.vazio ? 'transparent' : l.cor}`}></span>{l.texto}</li>
+      ))}
+    </ul>
+    <div class="cartao" data-cartao aria-live="polite">
+      <p class="rubrica dica">Passe o mouse ou toque numa cadeira</p>
+    </div>
+  </figcaption>
+  <script type="application/json" data-dados set:html={JSON.stringify(dados).replace(/</g, '\\u003c')}></script>
+</figure>
+
+<style>
+  .plenario { margin: 0; }
+  .controles { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+  .escolha-votacao { display: grid; gap: 6px; margin: 0 0 14px; max-width: 760px; }
+  .escolha-votacao[hidden] { display: none; }
+  .escolha-votacao select {
+    font-family: var(--f-texto); font-size: 16px; padding: 8px 10px; background: var(--papel-2); color: var(--tinta);
+    border: 1.5px solid var(--tinta); border-radius: 0; width: 100%; min-width: 0; text-overflow: ellipsis;
+  }
+  .palco { position: relative; }
+  svg { width: 100%; height: auto; display: block; overflow: visible; }
+  .cadeira {
+    stroke: var(--papel); stroke-width: 0.5;
+    transition: fill 0.45s ease, transform 0.25s ease, stroke 0.2s;
+    transform-box: fill-box; transform-origin: center;
+  }
+  .cadeira.vazia { stroke: var(--tinta-3); stroke-width: 0.6; stroke-dasharray: 1.2 0.9; }
+  a:hover .cadeira, a:focus-visible .cadeira, .cadeira.marcada { transform: scale(1.35); stroke: var(--tinta); stroke-width: 0.8; }
+  a:focus-visible { outline: none; }
+  .centro-grande { font-family: var(--f-display); font-weight: 900; font-size: 22px; fill: var(--tinta); }
+  .centro-pequeno { font-family: var(--f-mono); font-size: 4.6px; letter-spacing: 0.12em; text-transform: uppercase; fill: var(--tinta-2); }
+  figcaption { display: grid; grid-template-columns: 1fr minmax(260px, 340px); gap: 20px; align-items: start; margin-top: 18px; }
+  .legenda { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 16px; font-family: var(--f-mono); font-size: 13px; }
+  .legenda li { display: flex; align-items: center; gap: 6px; }
+  .bolinha { width: 12px; height: 12px; border-radius: 50%; display: inline-block; flex: none; }
+  .bolinha.vazia { border: 1.5px dashed var(--tinta-3); }
+  .cartao { border: 1.5px solid var(--tinta); background: var(--papel-2); padding: 12px; min-height: 92px; box-shadow: 5px 5px 0 var(--sombra); }
+  .dica { margin: 0; }
+  :global(.cartao-conteudo) { display: grid; grid-template-columns: 64px 1fr; gap: 12px; align-items: center; }
+  :global(.cartao-conteudo img), :global(.cartao-sem-foto) { width: 64px; height: 76px; object-fit: cover; filter: grayscale(1) contrast(1.1); background: var(--papel-3); }
+  :global(.cartao-nome) { font-family: var(--f-display); font-weight: 900; font-size: 26px; line-height: 0.95; text-transform: uppercase; margin: 0; }
+  :global(.cartao-partido) { font-family: var(--f-mono); font-size: 13px; margin: 2px 0 4px; }
+  :global(.cartao-valor) { margin: 0; font-size: 16px; line-height: 1.25; }
+  :global(.cartao-link) { font-family: var(--f-mono); font-size: 13px; }
+  @media (max-width: 720px) { figcaption { grid-template-columns: 1fr; } }
+</style>
+
+<script>
+  type Valor = { cor: string; texto: string; vazio?: boolean };
+  type Dados = {
+    modos: Record<string, { id: string; legenda: { cor: string; texto: string; vazio?: boolean }[]; centro: { grande: string; pequeno: string } }>;
+    valores: Record<string, Record<string, Valor>>;
+    info: Record<string, { nome: string; partido: string; foto: string | null; href?: string }>;
+    votacoes: { id: string; rotulo: string; href: string; votos: Record<string, string> }[];
+  };
+
+  const COR_VOTO: Record<string, Valor> = {
+    sim: { cor: 'var(--verde)', texto: 'Votou sim' },
+    nao: { cor: 'var(--carimbo)', texto: 'Votou não' },
+    abstencao: { cor: 'var(--ambar)', texto: 'Absteve-se' },
+    presidindo: { cor: 'var(--tinta-3)', texto: 'Presidia a sessão' },
+    ausente: { cor: 'transparent', texto: 'Ausente', vazio: true },
+  };
+  const LEGENDA_VOTO = [
+    { cor: 'var(--verde)', texto: 'Sim' }, { cor: 'var(--carimbo)', texto: 'Não' },
+    { cor: 'var(--ambar)', texto: 'Abstenção' }, { cor: 'transparent', texto: 'Ausente', vazio: true },
+  ];
+
+  for (const raiz of document.querySelectorAll<HTMLElement>('[data-plenario]')) {
+    const dados: Dados = JSON.parse(raiz.querySelector('[data-dados]')!.textContent!);
+    const botoes = raiz.querySelectorAll<HTMLButtonElement>('[data-modo]');
+    const escolha = raiz.querySelector<HTMLElement>('[data-escolha]');
+    const select = raiz.querySelector<HTMLSelectElement>('[data-votacao]');
+    const linkVotacao = raiz.querySelector<HTMLAnchorElement>('[data-link-votacao]');
+    const legenda = raiz.querySelector<HTMLElement>('[data-legenda]')!;
+    const cartao = raiz.querySelector<HTMLElement>('[data-cartao]')!;
+    const grande = raiz.querySelector<SVGTextElement>('[data-centro-grande]')!;
+    const pequeno = raiz.querySelector<SVGTextElement>('[data-centro-pequeno]')!;
+    const links = [...raiz.querySelectorAll<SVGAElement>('a[data-id]')];
+    let modo = [...botoes].find((b) => b.getAttribute('aria-pressed') === 'true')?.dataset.modo ?? '';
+    let selecionado: string | null = null;
+
+    const valorDe = (id: string): Valor | undefined => {
+      if (modo !== 'votacao') return dados.valores[id]?.[modo];
+      const v = dados.votacoes.find((x) => x.id === select?.value);
+      const voto = v?.votos[id];
+      return voto ? COR_VOTO[voto] ?? COR_VOTO.ausente : { cor: 'transparent', texto: 'Não estava na Casa nesta data', vazio: true };
+    };
+
+    const desenharLegenda = (itens: { cor: string; texto: string; vazio?: boolean }[]) => {
+      legenda.innerHTML = '';
+      for (const l of itens) {
+        const li = document.createElement('li');
+        const b = document.createElement('span');
+        b.className = 'bolinha' + (l.vazio ? ' vazia' : '');
+        b.style.background = l.vazio ? 'transparent' : l.cor;
+        li.append(b, l.texto);
+        legenda.append(li);
+      }
+    };
+
+    const pintar = () => {
+      for (const a of links) {
+        const c = a.querySelector('circle')!;
+        const v = valorDe(a.dataset.id!);
+        c.style.fill = v?.vazio ? 'transparent' : v?.cor ?? 'var(--papel-3)';
+        c.classList.toggle('vazia', !!v?.vazio);
+        const i = dados.info[a.dataset.id!];
+        a.setAttribute('aria-label', `${i.nome}, ${i.partido}: ${v?.texto ?? ''}`);
+      }
+      if (modo === 'votacao') {
+        const v = dados.votacoes.find((x) => x.id === select?.value);
+        const cont = { sim: 0, nao: 0 };
+        for (const voto of Object.values(v?.votos ?? {})) if (voto === 'sim' || voto === 'nao') cont[voto]++;
+        grande.textContent = `${cont.sim} × ${cont.nao}`;
+        pequeno.textContent = 'sim × não';
+        desenharLegenda(LEGENDA_VOTO);
+        if (linkVotacao && v) linkVotacao.href = v.href;
+      } else {
+        const m = dados.modos[modo];
+        grande.textContent = m.centro.grande;
+        pequeno.textContent = m.centro.pequeno;
+        desenharLegenda(m.legenda);
+      }
+      if (selecionado) mostrar(selecionado);
+    };
+
+    const mostrar = (id: string) => {
+      const i = dados.info[id];
+      const v = valorDe(id);
+      const foto = i.foto ? `<img src="${i.foto}" alt="" loading="lazy" />` : '<div class="cartao-sem-foto"></div>';
+      const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
+      cartao.innerHTML = `<div class="cartao-conteudo">${foto}<div>
+        <p class="cartao-nome">${esc(i.nome)}</p><p class="cartao-partido">${esc(i.partido)}</p>
+        <p class="cartao-valor">${esc(v?.texto ?? '')}</p>
+        ${i.href ? `<a class="cartao-link" href="${i.href}">abrir ficha →</a>` : ''}</div></div>`;
+      for (const a of links) a.querySelector('circle')!.classList.toggle('marcada', a.dataset.id === id);
+    };
+
+    botoes.forEach((b) => b.addEventListener('click', () => {
+      modo = b.dataset.modo!;
+      botoes.forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+      if (escolha) escolha.hidden = modo !== 'votacao';
+      pintar();
+    }));
+    select?.addEventListener('change', pintar);
+
+    // no mouse, passar por cima mostra o cartão e o clique abre a ficha; no toque, o primeiro
+    // toque numa cadeira mostra o cartão e o segundo abre a ficha
+    let ultimoPonteiro = 'mouse';
+    let toqueEm = 0;
+    for (const a of links) {
+      const id = a.dataset.id!;
+      a.addEventListener('pointerdown', (ev) => { ultimoPonteiro = ev.pointerType; toqueEm = Date.now(); });
+      a.addEventListener('pointerenter', (ev) => {
+        if (ev.pointerType === 'mouse') { selecionado = id; mostrar(id); }
+      });
+      a.addEventListener('focus', () => {
+        if (ultimoPonteiro !== 'mouse' && Date.now() - toqueEm < 800) return;  // o clique decide
+        selecionado = id;
+        mostrar(id);
+      });
+      a.addEventListener('click', (ev) => {
+        if (ultimoPonteiro !== 'mouse' && selecionado !== id) {
+          ev.preventDefault();
+          selecionado = id;
+          mostrar(id);
+        }
+      });
+    }
+  }
+</script>

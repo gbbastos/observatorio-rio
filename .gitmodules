@@ -1,0 +1,8 @@
+[submodule "vendor/como-votou"]
+	path = vendor/como-votou
+	url = https://github.com/Tomoyo-Computer-Science-Research-Unit/como-votou
+	ignore = dirty
+[submodule "vendor/assembleias"]
+	path = vendor/assembleias
+	url = https://github.com/Tomoyo-Computer-Science-Research-Unit/assembleias
+	ignore = dirty

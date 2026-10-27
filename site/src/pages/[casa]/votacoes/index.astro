@@ -1,0 +1,90 @@
+---
+import Base from '../../../layouts/Base.astro';
+import { casasDisponiveis, meta, votacoes, type Casa } from '../../../lib/dados';
+import { u, num, dataCurta, ementa, rotuloNorma } from '../../../lib/formatar';
+
+export function getStaticPaths() {
+  return casasDisponiveis().map((casa) => ({ params: { casa } }));
+}
+const casa = Astro.params.casa as Casa;
+const m = meta(casa);
+const todas = votacoes(casa);
+const porAno = new Map<string, typeof todas>();
+for (const v of todas) {
+  const a = v.data.slice(0, 4);
+  if (!porAno.has(a)) porAno.set(a, []);
+  porAno.get(a)!.push(v);
+}
+const apertada = (v: (typeof todas)[number]) =>
+  v.contagem && v.contagem.sim + v.contagem.nao > 0 && Math.abs(v.contagem.sim - v.contagem.nao) <= 5;
+---
+<Base casa={casa} titulo={`Votações nominais · ${m.curto}`}>
+  <div class="envelope">
+    <section class="secao">
+      <header>
+        <h1 class="display">Votações nominais</h1>
+        <span class="rubrica">{num(todas.length)} votações em que cada voto ficou registrado</span>
+      </header>
+      <p class="intro">
+        Na maior parte das sessões a votação é simbólica: quem concorda “permanece como está”, e ninguém
+        sabe quem votou o quê. Aqui estão só as votações nominais, em que o nome de cada {m.membro}
+        aparece na ata. As marcadas como <strong class="vermelho">apertada</strong> foram decididas por 5 votos ou menos.
+      </p>
+      <div class="busca">
+        <label class="rubrica" for="filtro">Procurar na ementa</label>
+        <input id="filtro" type="search" placeholder="ex.: IPTU, ônibus, escola" data-busca />
+      </div>
+      {[...porAno].map(([ano, vs]) => (
+        <section class="ano" data-ano>
+          <h2 class="display">{ano}</h2>
+          <ul>
+            {vs.map((v) => (
+              <li data-texto={`${v.proposicao.ementa ?? ''} ${v.proposicao.id ?? ''} ${v.proposicao.autores.join(' ')}`.toLowerCase()}>
+                <a href={u(`/${casa}/votacoes/${v.id}/`)}>
+                  <span class="rubrica">{dataCurta(v.data)} · {v.proposicao.id ? rotuloNorma(v.proposicao.id) : v.objeto} {v.objeto && v.objeto !== 'projeto' ? `· ${v.objeto}` : ''}</span>
+                  <span class="ementa">{ementa(v.proposicao.ementa) || v.resultado_frase}</span>
+                  <span class="placar">
+                    <strong class:list={[v.resultado === 'aprovado' || v.resultado === 'veto derrubado' ? 'ok' : 'nao']}>{v.resultado ?? 'sem resultado'}</strong>
+                    {v.contagem && <span>{v.contagem.sim} × {v.contagem.nao}</span>}
+                    {apertada(v) && <span class="vermelho">apertada</span>}
+                  </span>
+                </a>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ))}
+    </section>
+  </div>
+</Base>
+
+<style>
+  h1 { font-size: clamp(44px, 8vw, 84px); margin: 0; }
+  .intro { max-width: 68ch; font-size: 19px; color: var(--tinta-2); }
+  .busca { display: grid; gap: 6px; max-width: 480px; margin: 24px 0 8px; }
+  .busca input { font: inherit; font-size: 17px; padding: 10px 12px; background: var(--papel-2); color: var(--tinta); border: 1.5px solid var(--tinta); border-radius: 0; }
+  .ano h2 { font-size: 48px; margin: 40px 0 8px; }
+  .ano[hidden], li[hidden] { display: none; }
+  ul { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 0 32px; }
+  a { display: grid; gap: 4px; padding: 14px 0; border-bottom: 1px solid var(--linha); text-decoration: none; height: 100%; }
+  .ementa { font-size: 17px; line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+  .placar { font-family: var(--f-mono); font-size: 13px; display: flex; gap: 10px; text-transform: uppercase; }
+  .ok { color: var(--verde); }
+  .nao { color: var(--carimbo); }
+</style>
+
+<script>
+  const busca = document.querySelector<HTMLInputElement>('[data-busca]');
+  busca?.addEventListener('input', () => {
+    const q = busca.value.trim().toLowerCase();
+    document.querySelectorAll<HTMLElement>('[data-ano]').forEach((sec) => {
+      let n = 0;
+      sec.querySelectorAll<HTMLElement>('li').forEach((li) => {
+        const ok = !q || li.dataset.texto!.includes(q);
+        li.hidden = !ok;
+        if (ok) n++;
+      });
+      sec.hidden = n === 0;
+    });
+  });
+</script>

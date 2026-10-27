@@ -1,0 +1,122 @@
+---
+import Base from '../../layouts/Base.astro';
+import Carimbo from '../../components/Carimbo.astro';
+import BarraCategorias from '../../components/BarraCategorias.astro';
+import { casasDisponiveis, meta, leis, type Casa } from '../../lib/dados';
+import { ORDEM_CATEGORIAS } from '../../lib/categorias';
+import { u, num, dataCurta, rotuloNorma, ROTULO_CURTO } from '../../lib/formatar';
+
+export function getStaticPaths() {
+  return casasDisponiveis().filter((casa) => meta(casa).tem_leis).map((casa) => ({ params: { casa } }));
+}
+const casa = Astro.params.casa as Casa;
+const m = meta(casa);
+const lista = leis(casa).filter((l) => l.tipo === 'LEI' || l.tipo === 'LC');
+const anos = [...new Set(lista.map((l) => l.ano))].sort((a, b) => b - a);
+const MAX_AUTORES = 4;
+---
+<Base casa={casa} titulo={`Todas as leis · ${m.curto}`}>
+  <div class="envelope">
+    <section class="secao">
+      <header>
+        <h1 class="display">Todas as leis</h1>
+        <span class="rubrica">{num(lista.length)} leis ordinárias e complementares desde {m.ano_inicial}</span>
+      </header>
+      <BarraCategorias porCategoria={m.leis.por_categoria} alta />
+
+      <form class="filtros" data-filtros onsubmit="return false">
+        <div class="campo">
+          <label class="rubrica" for="q">Procurar</label>
+          <input id="q" type="search" name="q" placeholder="palavra da ementa ou nome de autor" />
+        </div>
+        <div class="campo">
+          <label class="rubrica" for="cat">Categoria</label>
+          <select id="cat" name="cat">
+            <option value="">todas</option>
+            <option value="simbolica">só simbólicas</option>
+            {ORDEM_CATEGORIAS.map((c) => <option value={c}>{ROTULO_CURTO[c]}</option>)}
+          </select>
+        </div>
+        <div class="campo">
+          <label class="rubrica" for="ano">Ano</label>
+          <select id="ano" name="ano">
+            <option value="">todos</option>
+            {anos.map((a) => <option value={a}>{a}</option>)}
+          </select>
+        </div>
+        <p class="rubrica contagem" data-contagem aria-live="polite">{num(lista.length)} leis</p>
+      </form>
+
+      <ol class="leis" data-lista>
+        {lista.map((l) => {
+          const pessoas = l.autores.filter((a) => !a.inst);
+          const autoresTexto = l.autores.map((a) => a.nome).join(' ');
+          return (
+            <li data-cat={l.categoria} data-simb={String(l.simbolica)} data-ano={l.ano}
+                data-texto={`${l.ementa} ${autoresTexto}`.toLowerCase()}>
+              <div class="meta">
+                <a class="rubrica" href={l.url} rel="noopener">{rotuloNorma(l.id)}</a>
+                <span class="rubrica data">{l.data ? dataCurta(l.data) : l.ano}</span>
+                <Carimbo categoria={l.categoria} pequeno />
+              </div>
+              <p class="ementa">{l.ementa}</p>
+              <p class="autores">
+                {pessoas.length === 0
+                  ? (l.autores.map((a) => a.nome).join(', ') || 'autoria não informada')
+                  : pessoas.slice(0, MAX_AUTORES).map((a, i) => (
+                      <>{a.slug ? <a href={u(`/${casa}/${a.slug}/`)}>{a.nome}</a> : a.nome}{i < Math.min(pessoas.length, MAX_AUTORES) - 1 ? ', ' : ''}</>
+                    ))}
+                {pessoas.length > MAX_AUTORES && <span class="mais"> e mais {pessoas.length - MAX_AUTORES}</span>}
+              </p>
+            </li>
+          );
+        })}
+      </ol>
+    </section>
+  </div>
+</Base>
+
+<style>
+  h1 { font-size: clamp(44px, 8vw, 84px); margin: 0; }
+  .filtros { display: grid; grid-template-columns: 2fr 1fr 1fr auto; gap: 12px; align-items: end; margin: 28px 0 12px;
+    position: sticky; top: 0; background: var(--papel); padding: 10px 0; z-index: 5; border-bottom: 1px solid var(--linha); }
+  .campo { display: grid; gap: 4px; min-width: 0; }
+  input, select { font: inherit; font-size: 16px; padding: 9px 10px; background: var(--papel-2); color: var(--tinta); border: 1.5px solid var(--tinta); border-radius: 0; min-width: 0; }
+  .contagem { margin: 0 0 10px; white-space: nowrap; }
+  .leis { list-style: none; margin: 0; padding: 0; }
+  .leis li { padding: 14px 0; border-bottom: 1px solid var(--linha); content-visibility: auto; contain-intrinsic-size: auto 120px; }
+  .leis li[hidden] { display: none; }
+  .meta { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+  .meta a { font-weight: 700; color: var(--tinta); }
+  .data { color: var(--tinta-3); font-size: 12px; }
+  .ementa { margin: 6px 0 4px; font-size: 18px; line-height: 1.38; }
+  .autores { margin: 0; font-size: 15px; color: var(--tinta-2); }
+  .mais { color: var(--carimbo); }
+  @media (max-width: 720px) {
+    .filtros { grid-template-columns: 1fr 1fr; position: static; }
+    .filtros .campo:first-child { grid-column: 1 / -1; }
+  }
+</style>
+
+<script>
+  const form = document.querySelector<HTMLFormElement>('[data-filtros]')!;
+  const itens = [...document.querySelectorAll<HTMLElement>('[data-lista] > li')];
+  const contagem = document.querySelector<HTMLElement>('[data-contagem]')!;
+  const filtrar = () => {
+    const f = new FormData(form);
+    const q = String(f.get('q') ?? '').trim().toLowerCase();
+    const cat = String(f.get('cat') ?? '');
+    const ano = String(f.get('ano') ?? '');
+    let n = 0;
+    for (const li of itens) {
+      const ok = (!q || li.dataset.texto!.includes(q))
+        && (!cat || (cat === 'simbolica' ? li.dataset.simb === 'true' : li.dataset.cat === cat))
+        && (!ano || li.dataset.ano === ano);
+      li.hidden = !ok;
+      if (ok) n++;
+    }
+    contagem.textContent = `${n.toLocaleString('pt-BR')} ${n === 1 ? 'lei' : 'leis'}`;
+  };
+  form.addEventListener('input', filtrar);
+  form.addEventListener('change', filtrar);
+</script>

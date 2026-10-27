@@ -1,0 +1,43 @@
+---
+// Barra empilhada com a divisão das leis por categoria.
+import { ORDEM_CATEGORIAS, COR_CATEGORIA } from '../lib/categorias';
+import { ROTULO_CURTO, num, pct } from '../lib/formatar';
+
+interface Props { porCategoria: Record<string, number>; alta?: boolean; legenda?: boolean }
+const { porCategoria, alta = false, legenda = true } = Astro.props;
+const total = Object.values(porCategoria).reduce((a, b) => a + b, 0);
+const partes = ORDEM_CATEGORIAS.filter((c) => porCategoria[c]).map((c) => ({
+  c, n: porCategoria[c], p: (100 * porCategoria[c]) / (total || 1),
+}));
+---
+<div class="barra-cat">
+  <div class:list={['barra', { alta }]} role="img"
+       aria-label={partes.map((x) => `${ROTULO_CURTO[x.c]}: ${x.n}`).join(', ')}>
+    {partes.map((x) => (
+      <span style={`width:${x.p}%;background:${COR_CATEGORIA[x.c]}`} title={`${ROTULO_CURTO[x.c]}: ${num(x.n)} (${pct(x.n, total)}%)`}></span>
+    ))}
+  </div>
+  {legenda && (
+    <ul class="leg">
+      {partes.map((x) => (
+        <li>
+          <span class="q" style={`background:${COR_CATEGORIA[x.c]}`}></span>
+          <span>{ROTULO_CURTO[x.c]}</span>
+          <strong>{num(x.n)}</strong>
+          <span class="p">{pct(x.n, total)}%</span>
+        </li>
+      ))}
+    </ul>
+  )}
+</div>
+
+<style>
+  .barra { display: flex; height: 14px; width: 100%; background: var(--papel-3); overflow: hidden; }
+  .barra.alta { height: 34px; }
+  .barra span { display: block; height: 100%; border-right: 1.5px solid var(--papel); }
+  .barra span:last-child { border-right: 0; }
+  .leg { list-style: none; padding: 0; margin: 12px 0 0; display: flex; flex-wrap: wrap; gap: 6px 20px; font-family: var(--f-mono); font-size: 13px; }
+  .leg li { display: flex; align-items: center; gap: 6px; }
+  .q { width: 11px; height: 11px; display: inline-block; }
+  .p { color: var(--tinta-3); }
+</style>

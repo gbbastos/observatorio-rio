@@ -1,0 +1,20 @@
+# respostas brutas das fontes e intermediários (refeitos pelo pipeline)
+data/raw/
+data/camara/
+data/cache/resumos-lote.json
+etl-*.log
+build.log
+
+# gerados pelo pipeline para o site
+site/src/data/
+site/public/fotos/
+
+# site
+site/node_modules/
+site/dist/
+site/.astro/
+
+# python
+__pycache__/
+*.pyc
+.venv/

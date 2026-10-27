@@ -1,0 +1,311 @@
+---
+import Base from '../../layouts/Base.astro';
+import BarraCategorias from '../../components/BarraCategorias.astro';
+import Carimbo from '../../components/Carimbo.astro';
+import { casasDisponiveis, meta, parlamentares, parlamentar, votacoes, type Casa } from '../../lib/dados';
+import { corPartido } from '../../lib/partidos';
+import { u, num, pct, pctTaxa, dataCurta, ementa, rotuloNorma, ROTULO_VOTO } from '../../lib/formatar';
+
+export function getStaticPaths() {
+  return casasDisponiveis().flatMap((casa) =>
+    parlamentares(casa).map((p) => ({ params: { casa, slug: p.slug } })));
+}
+
+const casa = Astro.params.casa as Casa;
+const m = meta(casa);
+const p = parlamentar(casa, Astro.params.slug!);
+const votacaoPorId = new Map(votacoes(casa).map((v) => [v.id, v]));
+
+// Com base de leis, a ficha mostra o que foi aprovado; sem ela (ALERJ), os projetos apresentados.
+const temLeis = m.tem_leis;
+type Item = { id: string; rotulo: string; data: string | null; ano: number | string; ementa: string; categoria: string;
+  simbolica: boolean; n_autores: number; url: string | null; status: string | null; resumo: string | null; coautores: string[] };
+const itens: Item[] = temLeis
+  ? p.lista_leis.filter((l) => l.tipo === 'LEI' || l.tipo === 'LC').map((l) => ({
+      id: l.id, rotulo: rotuloNorma(l.id), data: l.data, ano: l.ano, ementa: l.ementa, categoria: l.categoria,
+      simbolica: l.simbolica, n_autores: l.n_autores, url: l.url, status: l.status, resumo: l.resumo, coautores: l.coautores }))
+  : p.lista_proposicoes.filter((x) => x.tipo === 'PL' || x.tipo === 'PLC').map((x) => ({
+      id: x.id, rotulo: x.id.replace('-', ' '), data: x.data, ano: x.id.split('/')[1], ementa: ementa(x.ementa),
+      categoria: x.categoria ?? 'normativa', simbolica: !!x.simbolica, n_autores: 1 + x.coautores, url: null,
+      status: null, resumo: null, coautores: [] }));
+const total = temLeis ? p.leis.total : p.proposicoes.pl;
+const simb = temLeis ? p.leis.simbolicas : p.proposicoes.pl_simbolicos;
+const porCategoria = temLeis ? p.leis.por_categoria : p.proposicoes.pl_por_categoria;
+const honrarias = p.lista_leis.filter((l) => l.tipo === 'DL');
+const pSimb = pct(simb, total);
+const membro = m.membro.charAt(0).toUpperCase() + m.membro.slice(1);
+const situacao = p.em_exercicio ? `${membro} em exercício` : `Ex-${m.membro} (mandato desde ${m.ano_inicial})`;
+const inicial = p.nome.split(/\s+/).filter((x) => !/^(dr|dra|prof|profa)\.?$/i.test(x)).slice(0, 2).map((x) => x[0]).join('');
+
+const frase = temLeis
+  ? (total
+    ? `Desde ${m.ano_inicial}, ${p.nome} (${p.partido}) assina ${num(total)} leis aprovadas na ${m.curto}, ${num(p.leis.em_grupo)} delas junto com colegas. ${num(simb)} (${pSimb}%) são nome de rua, data comemorativa, patrimônio ou homenagem.`
+    : `Desde ${m.ano_inicial}, ${p.nome} (${p.partido}) não assina nenhuma lei aprovada na ${m.curto}.`)
+  : (total
+    ? `Desde ${m.ano_inicial}, ${p.nome} (${p.partido}) apresentou ${num(total)} projetos de lei na ${m.curto}. ${num(simb)} (${pSimb}%) são data comemorativa, patrimônio, nome de lugar ou homenagem.`
+    : `Desde ${m.ano_inicial}, ${p.nome} (${p.partido}) não apresentou projetos de lei na ${m.curto}.`);
+
+const recentes = p.lista_proposicoes.slice(0, 12);
+const votos = p.lista_votos.slice(0, 15).map((v) => ({ ...v, info: votacaoPorId.get(v.id) }));
+const anosPresenca = Object.entries(p.presenca).sort((a, b) => Number(b[0]) - Number(a[0]));
+const statusRuim = (s: string | null) => !!s && /inconstitucional|revoga/i.test(s);
+---
+<Base casa={casa} titulo={`${p.nome} (${p.partido})`} descricao={frase} imagem={p.foto}>
+  <article class="envelope ficha">
+    <nav class="rubrica migalha"><a href={u(casa === 'camara' ? '/' : `/${casa}/`)}>{m.curto}</a> / {m.membros}</nav>
+
+    <header class="topo surge">
+      <div class="retrato" style={`--cor-partido:${corPartido(p.partido)}`}>
+        {p.foto ? <img src={u(`/${p.foto}`)} alt={`Foto de ${p.nome}`} width="260" height="320" />
+                : <div class="sem-retrato display">{inicial}</div>}
+        <span class="faixa rubrica">{p.partido}</span>
+      </div>
+      <div class="identidade">
+        <p class="rubrica">{situacao}</p>
+        <h1 class="display">{p.nome}</h1>
+        {p.nome_civil && p.nome_civil !== p.nome && <p class="civil">{p.nome_civil}</p>}
+        <p class="frase">{frase}</p>
+        <div class="acoes">
+          <button class="botao" type="button" data-copiar={`${frase} ${new URL(Astro.url.pathname, Astro.site).href}`}>Copiar resumo</button>
+          {p.perfil_url && <a class="botao" href={p.perfil_url} rel="noopener">Perfil oficial ↗</a>}
+        </div>
+      </div>
+    </header>
+
+    <section class="boletim" aria-label="Números">
+      <div class="celula destaque">
+        <span class="numero-gigante">{num(total)}</span>
+        <span class="rubrica">{temLeis ? 'leis aprovadas' : 'projetos de lei apresentados'} desde {m.ano_inicial}</span>
+      </div>
+      <div class="celula">
+        <span class="numero-gigante vermelho">{pSimb}%</span>
+        <span class="rubrica">simbólic{temLeis ? 'as' : 'os'} ({num(simb)})</span>
+      </div>
+      {temLeis ? (
+        <>
+          <div class="celula">
+            <span class="numero-gigante">{num(p.leis.peso, 1)}</span>
+            <span class="rubrica">peso real: cada lei dividida pelo nº de autores</span>
+          </div>
+          <div class="celula">
+            <span class="numero-gigante">{num(p.leis.em_grupo)}</span>
+            <span class="rubrica">leis assinadas em grupo</span>
+          </div>
+        </>
+      ) : (
+        <>
+          <div class="celula">
+            <span class="numero-gigante">{num(p.proposicoes.mocoes)}</span>
+            <span class="rubrica">moções de aplauso, louvor ou repúdio</span>
+          </div>
+          <div class="celula">
+            <span class="numero-gigante">{num(p.proposicoes.indicacoes)}</span>
+            <span class="rubrica">indicações (pedidos ao governo)</span>
+          </div>
+        </>
+      )}
+      <div class="celula">
+        <span class="numero-gigante">{num(p.proposicoes.reqinf)}</span>
+        <span class="rubrica">requerimentos de informação (fiscalização)</span>
+      </div>
+      <div class="celula">
+        <span class="numero-gigante">{num(temLeis ? p.titulos : p.proposicoes.honrarias)}</span>
+        <span class="rubrica">títulos e medalhas {temLeis ? 'concedidos' : 'propostos'}</span>
+      </div>
+      <div class="celula">
+        <span class="numero-gigante">{pctTaxa(p.votacoes.participacao)}</span>
+        <span class="rubrica">presença nas votações nominais</span>
+      </div>
+      <div class="celula">
+        <span class="numero-gigante">{num(p.votacoes.contra_partido ?? 0)}</span>
+        <span class="rubrica">votos contra a maioria do partido</span>
+      </div>
+    </section>
+
+    {itens.length > 0 && (
+      <section class="secao" id="leis">
+        <header>
+          <h2 class="display">{temLeis ? 'O que aprovou' : 'O que propôs'}</h2>
+          <span class="rubrica">{num(itens.length)} {temLeis ? 'leis' : 'projetos de lei'} com o nome de {p.nome}</span>
+        </header>
+        <BarraCategorias porCategoria={porCategoria} alta />
+        <div class="filtros" role="group" aria-label="Filtrar">
+          <button class="botao" type="button" data-filtro="todas" aria-pressed="true">Tod{temLeis ? 'as' : 'os'}</button>
+          <button class="botao" type="button" data-filtro="simbolica" aria-pressed="false">Só simbólic{temLeis ? 'as' : 'os'}</button>
+          <button class="botao" type="button" data-filtro="normativa" aria-pressed="false">Só o resto</button>
+          {temLeis && <button class="botao" type="button" data-filtro="grupo" aria-pressed="false">Assinadas em grupo</button>}
+        </div>
+        <ol class="leis" data-lista-leis>
+          {itens.map((l) => (
+            <li data-categoria={l.categoria} data-simbolica={String(l.simbolica)} data-grupo={String(l.n_autores > 1)}>
+              <div class="lei-meta">
+                {l.url ? <a class="rubrica" href={l.url} rel="noopener">{l.rotulo}</a> : <span class="rubrica forte">{l.rotulo}</span>}
+                <span class="rubrica data">{l.data ? dataCurta(l.data) : l.ano}</span>
+              </div>
+              <div class="lei-corpo">
+                <p class="ementa">{l.ementa}</p>
+                {l.resumo && <p class="resumo"><span class="rubrica">Em poucas palavras:</span> {l.resumo}</p>}
+                <p class="lei-rodape">
+                  <Carimbo categoria={l.categoria} pequeno />
+                  {statusRuim(l.status) && <Carimbo texto={l.status!} tom="tinta" pequeno />}
+                  {l.n_autores > 1 && (
+                    <span class="coautores" title={l.coautores.join(', ')}>
+                      com mais {l.n_autores - 1} {l.n_autores - 1 === 1 ? 'autor' : 'autores'}
+                    </span>
+                  )}
+                </p>
+              </div>
+            </li>
+          ))}
+        </ol>
+        <p class="vazio rubrica" data-vazio hidden>Nenhuma lei neste filtro.</p>
+      </section>
+    )}
+
+    <div class="duas-colunas">
+      <section class="secao">
+        <header>
+          <h2 class="display">Últimos projetos</h2>
+          <span class="rubrica">o que protocolou</span>
+        </header>
+        {recentes.length === 0 ? <p class="rubrica">Nenhum projeto encontrado.</p> : (
+          <ul class="lista-simples">
+            {recentes.map((x) => (
+              <li>
+                <span class="rubrica">{dataCurta(x.data)} · {x.tipo} {x.id.split('-').slice(1).join('-')}</span>
+                <span class="ementa-curta">{ementa(x.ementa)}</span>
+                {x.simbolica && <Carimbo categoria={x.categoria} pequeno />}
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <section class="secao">
+        <header>
+          <h2 class="display">Como votou</h2>
+          <span class="rubrica">últimas votações nominais</span>
+        </header>
+        {votos.length === 0 ? <p class="rubrica">Nenhuma votação nominal registrada.</p> : (
+          <ul class="lista-simples">
+            {votos.map((v) => (
+              <li>
+                <span class="rubrica">{dataCurta(v.info?.data)} · {v.info?.proposicao.id ? rotuloNorma(v.info.proposicao.id) : v.info?.objeto}</span>
+                <a class="ementa-curta" href={u(`/${casa}/votacoes/${v.id}/`)}>{ementa(v.info?.proposicao.ementa)}</a>
+                <span class:list={['voto', `voto-${v.voto}`]}>{ROTULO_VOTO[v.voto] ?? v.voto}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+    </div>
+
+    {(honrarias.length > 0 || anosPresenca.length > 0) && (
+      <div class="duas-colunas">
+        {anosPresenca.length > 0 && (
+          <section class="secao">
+            <header><h2 class="display">Faltas</h2><span class="rubrica">frequência mensal publicada pela casa</span></header>
+            <table class="tabela">
+              <thead><tr><th>Ano</th><th>Faltas</th><th>Abonadas</th><th>Sem justificativa</th></tr></thead>
+              <tbody>
+                {anosPresenca.map(([ano, f]) => (
+                  <tr><td>{ano}</td><td>{f.faltas}</td><td>{f.abonadas}</td><td class:list={[{ vermelho: f.total > 0 }]}>{f.total}</td></tr>
+                ))}
+              </tbody>
+            </table>
+          </section>
+        )}
+        {honrarias.length > 0 && (
+          <section class="secao">
+            <header><h2 class="display">Honrarias</h2><span class="rubrica">decretos legislativos</span></header>
+            <ul class="lista-simples">
+              {honrarias.slice(0, 10).map((h) => (
+                <li><span class="rubrica">{rotuloNorma(h.id)}</span><span class="ementa-curta">{h.ementa}</span></li>
+              ))}
+            </ul>
+            {honrarias.length > 10 && <p class="rubrica">e mais {honrarias.length - 10}.</p>}
+          </section>
+        )}
+      </div>
+    )}
+  </article>
+</Base>
+
+<style>
+  .migalha { margin: 28px 0 0; }
+  .migalha a { text-decoration: none; }
+  .topo { display: grid; grid-template-columns: minmax(180px, 260px) 1fr; gap: clamp(20px, 4vw, 48px); margin-top: 18px; align-items: end; }
+  .retrato { position: relative; border: 1.5px solid var(--tinta); box-shadow: 8px 8px 0 var(--cor-partido); background: var(--papel-3); }
+  .retrato img { width: 100%; aspect-ratio: 13 / 16; object-fit: cover; filter: grayscale(1) contrast(1.15); }
+  .sem-retrato { aspect-ratio: 13 / 16; display: grid; place-items: center; font-size: 110px; color: var(--tinta-3); }
+  .faixa { position: absolute; left: -1.5px; bottom: 14px; background: var(--cor-partido); color: #fff; padding: 4px 10px; font-weight: 700; }
+  .identidade h1 { font-size: clamp(56px, 10vw, 128px); margin: 4px 0 6px; overflow-wrap: anywhere; }
+  .civil { margin: 0 0 10px; font-style: italic; color: var(--tinta-2); }
+  .frase { font-size: clamp(19px, 2.2vw, 24px); line-height: 1.35; max-width: 46ch; margin: 10px 0 16px; }
+  .acoes { display: flex; gap: 8px; flex-wrap: wrap; }
+  .boletim { display: grid; grid-template-columns: repeat(4, 1fr); border-top: 3px solid var(--tinta); border-left: 1px solid var(--linha); margin-top: 48px; }
+  .celula { padding: 16px 16px 18px; border-right: 1px solid var(--linha); border-bottom: 1px solid var(--linha); display: grid; gap: 8px; align-content: start; }
+  .celula .numero-gigante { font-size: clamp(44px, 6vw, 72px); }
+  .celula .rubrica { font-size: 11px; line-height: 1.35; }
+  .filtros { display: flex; flex-wrap: wrap; gap: 6px; margin: 22px 0 8px; }
+  .leis { list-style: none; margin: 0; padding: 0; }
+  .leis li { display: grid; grid-template-columns: 150px 1fr; gap: 18px; padding: 16px 0; border-bottom: 1px solid var(--linha); }
+  .leis li[hidden] { display: none; }
+  .lei-meta { display: grid; gap: 4px; align-content: start; }
+  .lei-meta a, .lei-meta .forte { color: var(--tinta); font-weight: 700; }
+  .data { font-size: 12px; color: var(--tinta-3); }
+  .ementa { margin: 0; font-size: 19px; line-height: 1.38; }
+  .resumo { margin: 8px 0 0; font-size: 16px; color: var(--tinta-2); }
+  .lei-rodape { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 10px 0 0; }
+  .coautores { font-family: var(--f-mono); font-size: 13px; color: var(--carimbo); border-bottom: 1px dotted currentColor; cursor: help; }
+  .duas-colunas { display: grid; grid-template-columns: 1fr 1fr; gap: 0 48px; }
+  .lista-simples { list-style: none; margin: 0; padding: 0; }
+  .lista-simples li { display: grid; gap: 4px; padding: 12px 0; border-bottom: 1px solid var(--linha); justify-items: start; }
+  .ementa-curta { font-size: 17px; line-height: 1.35; text-decoration: none; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+  .voto { font-family: var(--f-mono); font-size: 13px; text-transform: uppercase; font-weight: 700; padding: 2px 8px; border: 1.5px solid currentColor; }
+  .voto-sim { color: var(--verde); }
+  .voto-nao { color: var(--carimbo); }
+  .voto-abstencao { color: var(--ambar); }
+  .voto-ausente, .voto-presidindo { color: var(--tinta-3); border-style: dashed; }
+  .tabela { width: 100%; border-collapse: collapse; font-family: var(--f-mono); font-size: 14px; }
+  .tabela th, .tabela td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--linha); }
+  .tabela th { font-weight: 400; color: var(--tinta-3); text-transform: uppercase; font-size: 11px; letter-spacing: 0.08em; }
+  @media (max-width: 860px) {
+    .boletim { grid-template-columns: repeat(2, 1fr); }
+    .duas-colunas { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 600px) {
+    .topo { grid-template-columns: 1fr; }
+    .retrato { max-width: 220px; }
+    .leis li { grid-template-columns: 1fr; gap: 6px; }
+    .lei-meta { display: flex; gap: 12px; }
+  }
+</style>
+
+<script>
+  const lista = document.querySelector<HTMLElement>('[data-lista-leis]');
+  const vazio = document.querySelector<HTMLElement>('[data-vazio]');
+  const botoes = document.querySelectorAll<HTMLButtonElement>('[data-filtro]');
+  botoes.forEach((b) => b.addEventListener('click', () => {
+    const f = b.dataset.filtro;
+    botoes.forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+    let visiveis = 0;
+    lista?.querySelectorAll<HTMLElement>('li').forEach((li) => {
+      const ok = f === 'todas'
+        || (f === 'simbolica' && li.dataset.simbolica === 'true')
+        || (f === 'normativa' && li.dataset.simbolica === 'false')
+        || (f === 'grupo' && li.dataset.grupo === 'true');
+      li.hidden = !ok;
+      if (ok) visiveis++;
+    });
+    if (vazio) vazio.hidden = visiveis > 0;
+  }));
+
+  document.querySelectorAll<HTMLButtonElement>('[data-copiar]').forEach((b) => b.addEventListener('click', async () => {
+    const texto = b.dataset.copiar!;
+    try {
+      if (navigator.share && matchMedia('(pointer: coarse)').matches) await navigator.share({ text: texto });
+      else { await navigator.clipboard.writeText(texto); b.textContent = 'Copiado!'; setTimeout(() => (b.textContent = 'Copiar resumo'), 1800); }
+    } catch { /* o usuário cancelou o compartilhamento */ }
+  }));
+</script>
