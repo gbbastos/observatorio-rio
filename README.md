@@ -42,6 +42,8 @@ Pré-requisitos: Python 3.12+, Node 22+, Git.
 git submodule update --init
 
 # 1. coleta da Tomoyo (a primeira vez leva ~1 h por casa, a 1 pedido por segundo; depois é incremental)
+#    no Windows, rode com PYTHONUTF8=1: sem isso o Python grava os arquivos em cp1252 e a coleta quebra no fim
+export PYTHONUTF8=1
 cd vendor/como-votou/backend
 python -m venv .venv && .venv/Scripts/pip install -e .      # no Linux/Mac: .venv/bin/pip
 .venv/Scripts/python -m app.etl.export_snapshot --all
