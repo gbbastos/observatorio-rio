@@ -27,7 +27,7 @@ const totalDe = (p: Parlamentar) => (temLeis ? p.leis.total : p.proposicoes.pl);
 const simbDe = (p: Parlamentar) => (temLeis ? p.leis.simbolicas : p.proposicoes.pl_simbolicos);
 const honrariasDe = (p: Parlamentar) => (temLeis ? p.titulos : p.proposicoes.honrarias);
 const FRASE: Record<string, string> = {
-  calendario: 'data comemorativa', logradouro: 'nome de rua', patrimonio: 'patrimônio ou polo turístico',
+  calendario: 'data comemorativa', logradouro: 'nome de rua', patrimonio: 'patrimônio',
   utilidade_publica: 'utilidade pública', honraria: 'homenagem',
 };
 const topSimb = Object.entries(base.por_categoria).filter(([c]) => c !== 'normativa')
@@ -181,7 +181,9 @@ const pctGeral = pct(base.simbolicas, base.total);
         <div><span class="numero-gigante">{num(projetosRecentes.length)}</span><span class="rubrica">projetos de lei</span></div>
         <div><span class="numero-gigante vermelho">{num(projetosRecentes.filter((x) => x.simbolica).length)}</span><span class="rubrica">deles simbólicos</span></div>
         <div><span class="numero-gigante">{num(contaTipo('REQINF'))}</span><span class="rubrica">pedidos de informação</span></div>
-        <div><span class="numero-gigante">{num(contaTipo('MOC', 'IND', 'PDL', 'PR'))}</span><span class="rubrica">moções, indicações e honrarias</span></div>
+        {contaTipo('MOC', 'IND', 'PDL', 'PR') > 0 && (
+          <div><span class="numero-gigante">{num(contaTipo('MOC', 'IND', 'PDL', 'PR'))}</span><span class="rubrica">moções, indicações e honrarias</span></div>
+        )}
         {maisAtivos.length > 0 && (
           <p class="ativos rubrica">Mais ativos:{' '}
             {maisAtivos.map((x, i) => (<><a href={ficha(x.p)}>{x.p.nome}</a> ({x.n}){i < maisAtivos.length - 1 ? ', ' : ''}</>))}

@@ -108,7 +108,8 @@ def coletar_normas(*, atualizar: bool = True) -> list[dict[str, Any]]:
 _CAMPOS_FICHA = {
     "data": re.compile(r"Data da (?:Lei|Norma|Resolução|Decreto Legislativo)\s+(\d{1,2})/(\d{1,2})/(\d{4})", re.I),
     "projeto": re.compile(r"Projeto de (Lei Complementar|Lei|Decreto Legislativo|Resolução) nº\s*([\d.]+)\s*/\s*(\d{4})", re.I),
-    "forma": re.compile(r"Forma de Vigência\s+(.+?)\s+(?:Leis relacionadas|Atalho|$)", re.I),
+    "forma": re.compile(r"Forma de Vigência\s+(Sancionada/Promulgada|Promulgada/Sanção Tácita|Sancionada|Promulgada|"
+                        r"Sanção Tácita)", re.I),
 }
 _SIGLA_PROJETO = {"lei": "PL", "lei complementar": "PLC", "decreto legislativo": "PDL", "resolução": "PR"}
 
@@ -131,8 +132,7 @@ def ler_ficha(norma: dict[str, Any]) -> dict[str, Any]:
         sigla = _SIGLA_PROJETO.get(m.group(1).lower(), "PL")
         ficha["projeto"] = f"{sigla}-{int(m.group(2).replace('.', ''))}/{m.group(3)}"
     if m := _CAMPOS_FICHA["forma"].search(texto):
-        forma = m.group(1).strip()
-        ficha["forma"] = forma[:60] if forma else None
+        ficha["forma"] = m.group(1)
     if m := _TEXTO_LEI.search(texto):
         ficha["texto"] = m.group(1).strip()
     return ficha
