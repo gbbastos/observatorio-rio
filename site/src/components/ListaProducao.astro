@@ -1,7 +1,8 @@
 ---
-// Lista de leis aprovadas ou de projetos apresentados na ficha do parlamentar: barra por categoria
-// (clicável), glossário das categorias, filtros, temas das regras e políticas e a lista em si. O
-// filtro roda no script da ficha ([slug].astro); cada item leva o mandato em data-leg.
+// Lista de leis aprovadas, projetos apresentados ou pedidos de informação na ficha do parlamentar:
+// barra por categoria (clicável), glossário das categorias, filtros, temas e a lista em si. O filtro
+// roda no script da ficha ([slug].astro): cada botão diz "campo:valor" de um data-* do item, e cada
+// item leva o mandato em data-leg.
 import BarraCategorias from './BarraCategorias.astro';
 import Carimbo from './Carimbo.astro';
 import { ORDEM_CATEGORIAS, ORDEM_TEMAS, ROTULO_TEMA, DEFINICAO_CATEGORIA, COR_CATEGORIA } from '../lib/categorias';
@@ -28,8 +29,14 @@ interface Props {
   limite?: number;
   /** observação curta abaixo do cabeçalho */
   nota?: string;
+  /** mandatos sem dados para esta lista, e o que dizer quando um deles é escolhido */
+  semDados?: { legs: number[]; msg: string };
+  /** false para listas sem categoria simbólica (pedidos de informação): só temas */
+  categorias?: boolean;
+  rotuloTemas?: string;
 }
-const { id, titulo, plural, sub, feminino, itens, extra, limite = 30, nota } = Astro.props;
+const { id, titulo, plural, sub, feminino, itens, extra, limite = 30, nota, semDados, categorias = true,
+  rotuloTemas = 'Regras e políticas por tema' } = Astro.props;
 const a = feminino ? 'a' : 'o';
 
 const porCategoria: Record<string, number> = {};
@@ -43,16 +50,17 @@ const temas = ORDEM_TEMAS.filter((t) => porTema[t])
   .sort((x, y) => Number(x === 'outros') - Number(y === 'outros') || porTema[y] - porTema[x]);
 const statusRuim = (s?: string | null) => !!s && /inconstitucional|revoga/i.test(s);
 ---
-<section class="secao producao" id={id} data-secao data-limite={limite}>
+<section class="secao producao" id={id} data-secao data-limite={limite}
+         data-sem-dados={semDados?.legs.join(',')} data-msg-sem-dados={semDados?.msg}>
   <header>
     <h2 class="display">{titulo}</h2>
     <span class="rubrica"><span data-total>{num(itens.length)}</span> {plural} {sub}</span>
   </header>
   {nota && <p class="nota-secao">{nota}</p>}
 
-  <BarraCategorias porCategoria={porCategoria} alta filtravel />
+  {categorias && <BarraCategorias porCategoria={porCategoria} alta filtravel />}
 
-  <details class="glossario">
+  {categorias && <details class="glossario">
     <summary class="rubrica">O que entra em cada categoria?</summary>
     <dl>
       {ORDEM_CATEGORIAS.map((c) => (
@@ -68,19 +76,21 @@ const statusRuim = (s?: string | null) => !!s && /inconstitucional|revoga/i.test
       a própria Câmara publica, e as regras concordam com elas em 98% das leis. O tema das regras e
       políticas também sai da ementa. <a href={u('/sobre/')}>Como os números são feitos</a>.
     </p>
-  </details>
+  </details>}
 
-  <div class="filtros" role="group" aria-label="Filtrar">
-    <button class="botao" type="button" data-filtro="todas" aria-pressed="true">Tod{a}s</button>
-    <button class="botao" type="button" data-filtro="simbolica" aria-pressed="false">Só simbólic{a}s</button>
-    <button class="botao" type="button" data-filtro="normativa" aria-pressed="false">Só regras e políticas</button>
-    {extra === 'grupo' && <button class="botao" type="button" data-filtro="grupo" aria-pressed="false">Assinadas em grupo</button>}
-    {extra === 'virou' && <button class="botao" type="button" data-filtro="virou" aria-pressed="false">Viraram lei</button>}
-  </div>
+  {categorias && (
+    <div class="filtros" role="group" aria-label="Filtrar">
+      <button class="botao" type="button" data-filtro="todas" aria-pressed="true">Tod{a}s</button>
+      <button class="botao" type="button" data-filtro="simb:1" aria-pressed="false">Só simbólic{a}s</button>
+      <button class="botao" type="button" data-filtro="simb:" aria-pressed="false">Só regras e políticas</button>
+      {extra === 'grupo' && <button class="botao" type="button" data-filtro="grupo:1" aria-pressed="false">Assinadas em grupo</button>}
+      {extra === 'virou' && <button class="botao" type="button" data-filtro="virou:1" aria-pressed="false">Viraram lei</button>}
+    </div>
+  )}
 
   {temas.length > 0 && (
-    <div class="temas" role="group" aria-label="Regras e políticas por tema">
-      <span class="rubrica">Regras e políticas por tema</span>
+    <div class="temas" role="group" aria-label={rotuloTemas}>
+      <span class="rubrica">{rotuloTemas}</span>
       <div class="chips">
         {temas.map((t) => (
           <button type="button" class="tema" data-tema={t} aria-pressed="false">

@@ -2,6 +2,7 @@
 import Base from '../../../layouts/Base.astro';
 import { casasDisponiveis, meta, votacoes, type Casa } from '../../../lib/dados';
 import { u, num, dataCurta, ementa, rotuloNorma } from '../../../lib/formatar';
+import { ORDEM_TEMAS, ROTULO_TEMA } from '../../../lib/categorias';
 
 export function getStaticPaths() {
   return casasDisponiveis().map((casa) => ({ params: { casa } }));
@@ -15,6 +16,13 @@ for (const v of todas) {
   if (!porAno.has(a)) porAno.set(a, []);
   porAno.get(a)!.push(v);
 }
+// tema da matéria, só para o que não é simbólico (homenagem, nome de rua...)
+const temaDe = (v: (typeof todas)[number]) =>
+  (v.proposicao.categoria && v.proposicao.categoria !== 'normativa' ? null : v.proposicao.tema);
+const porTema: Record<string, number> = {};
+for (const v of todas) { const t = temaDe(v); if (t) porTema[t] = (porTema[t] ?? 0) + 1; }
+const temas = ORDEM_TEMAS.filter((t) => porTema[t])
+  .sort((a, b) => Number(a === 'outros') - Number(b === 'outros') || porTema[b] - porTema[a]);
 const apertada = (v: (typeof todas)[number]) =>
   v.contagem && v.contagem.sim + v.contagem.nao > 0 && Math.abs(v.contagem.sim - v.contagem.nao) <= 5;
 ---
@@ -30,16 +38,25 @@ const apertada = (v: (typeof todas)[number]) =>
         sabe quem votou o quê. Aqui estão só as votações nominais, em que o nome de cada {m.membro}
         aparece na ata. As marcadas como <strong class="vermelho">apertada</strong> foram decididas por 5 votos ou menos.
       </p>
-      <div class="busca">
-        <label class="rubrica" for="filtro">Procurar na ementa</label>
-        <input id="filtro" type="search" placeholder="ex.: IPTU, ônibus, escola" data-busca />
+      <div class="filtros">
+        <div class="busca">
+          <label class="rubrica" for="filtro">Procurar na ementa</label>
+          <input id="filtro" type="search" placeholder="ex.: IPTU, ônibus, escola" data-busca />
+        </div>
+        <div class="busca">
+          <label class="rubrica" for="tema">Tema da matéria</label>
+          <select id="tema" data-tema-filtro>
+            <option value="">todos</option>
+            {temas.map((t) => <option value={t}>{ROTULO_TEMA[t]} ({num(porTema[t])})</option>)}
+          </select>
+        </div>
       </div>
       {[...porAno].map(([ano, vs]) => (
         <section class="ano" data-ano>
           <h2 class="display">{ano}</h2>
           <ul>
             {vs.map((v) => (
-              <li data-texto={`${v.proposicao.ementa ?? ''} ${v.proposicao.id ?? ''} ${v.proposicao.autores.join(' ')}`.toLowerCase()}>
+              <li data-tema={temaDe(v) ?? undefined} data-texto={`${v.proposicao.ementa ?? ''} ${v.proposicao.id ?? ''} ${v.proposicao.autores.join(' ')}`.toLowerCase()}>
                 <a href={u(`/${casa}/votacoes/${v.id}/`)}>
                   <span class="rubrica">{dataCurta(v.data)} · {v.proposicao.id ? rotuloNorma(v.proposicao.id) : v.objeto} {v.objeto && v.objeto !== 'projeto' ? `· ${v.objeto}` : ''}</span>
                   <span class="ementa">{ementa(v.proposicao.ementa) || v.resultado_frase}</span>
@@ -61,8 +78,9 @@ const apertada = (v: (typeof todas)[number]) =>
 <style>
   h1 { font-size: clamp(44px, 8vw, 84px); margin: 0; }
   .intro { max-width: 68ch; font-size: 19px; color: var(--tinta-2); }
-  .busca { display: grid; gap: 6px; max-width: 480px; margin: 24px 0 8px; }
-  .busca input { font: inherit; font-size: 17px; padding: 10px 12px; background: var(--papel-2); color: var(--tinta); border: 1.5px solid var(--tinta); border-radius: 0; }
+  .filtros { display: grid; grid-template-columns: minmax(0, 480px) minmax(0, 280px); gap: 12px; margin: 24px 0 8px; }
+  .busca { display: grid; gap: 6px; }
+  .busca input, .busca select { font: inherit; font-size: 17px; padding: 10px 12px; background: var(--papel-2); color: var(--tinta); border: 1.5px solid var(--tinta); border-radius: 0; }
   .ano h2 { font-size: 48px; margin: 40px 0 8px; }
   .ano[hidden], li[hidden] { display: none; }
   ul { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 0 32px; }
@@ -70,21 +88,26 @@ const apertada = (v: (typeof todas)[number]) =>
   .ementa { font-size: 17px; line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
   .placar { font-family: var(--f-mono); font-size: 13px; display: flex; gap: 10px; text-transform: uppercase; }
   .ok { color: var(--verde); }
+  @media (max-width: 600px) { .filtros { grid-template-columns: 1fr; } }
   .nao { color: var(--carimbo); }
 </style>
 
 <script>
-  const busca = document.querySelector<HTMLInputElement>('[data-busca]');
-  busca?.addEventListener('input', () => {
+  const busca = document.querySelector<HTMLInputElement>('[data-busca]')!;
+  const tema = document.querySelector<HTMLSelectElement>('[data-tema-filtro]')!;
+  const filtrar = () => {
     const q = busca.value.trim().toLowerCase();
+    const t = tema.value;
     document.querySelectorAll<HTMLElement>('[data-ano]').forEach((sec) => {
       let n = 0;
       sec.querySelectorAll<HTMLElement>('li').forEach((li) => {
-        const ok = !q || li.dataset.texto!.includes(q);
+        const ok = (!q || li.dataset.texto!.includes(q)) && (!t || li.dataset.tema === t);
         li.hidden = !ok;
         if (ok) n++;
       });
       sec.hidden = n === 0;
     });
-  });
+  };
+  busca.addEventListener('input', filtrar);
+  tema.addEventListener('change', filtrar);
 </script>

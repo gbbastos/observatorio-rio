@@ -29,7 +29,10 @@ const exemplos = [
     </p>
     <ul class="fontes">
       {casas.map((m) => (
-        <li><strong>{m.nome}</strong>: dados atualizados em {dataLonga(m.atualizado_em)}, desde {m.ano_inicial}.
+        <li><strong>{m.nome}</strong>: dados atualizados em {dataLonga(m.atualizado_em)};
+          {m.tem_leis && m.ano_inicial_leis !== m.ano_inicial
+            ? <>leis desde {m.ano_inicial_leis}, projetos, votações e frequência desde {m.ano_inicial}.</>
+            : <>desde {m.ano_inicial}.</>}
           {m.fontes.map((f) => <> <a href={f.url}>{f.nome}</a>.</>)}
         </li>
       ))}
@@ -62,15 +65,29 @@ const exemplos = [
       empate, o que aparece primeiro, que costuma ser o assunto principal. Quando a ementa só diz “altera a
       Lei nº tal”, lemos o começo do texto da lei. Cada lei fica com um tema só, mesmo quando trata de dois
       (uma lei sobre autismo nas escolas conta como educação ou direitos, não como as duas). O que não se
-      encaixa fica como “outros”: cerca de 1% das leis e 14% dos projetos, quase sempre ementas que só
-      remetem a outra lei.
+      encaixa fica como “outros”: cerca de 2% das leis, 6% dos pedidos de informação e 14% dos projetos,
+      quase sempre ementas que só remetem a outra lei.
+    </p>
+
+    <h2 class="display">Votos e pedidos de informação por tema</h2>
+    <p>
+      Cada votação nominal herda o tema da matéria votada, e cada pedido de informação ganha o tema pelo
+      assunto ou pelo órgão a quem pergunta (“Secretaria Municipal de Saúde”, “SMTR”). Assim dá para ver
+      como alguém votou em saúde ou em transporte, e sobre o que mais pergunta ao governo. Quantidade não
+      é qualidade: um pedido bem feito vale mais que dez repetidos, e o site mostra o texto de cada um.
     </p>
 
     <h2 class="display">Mandatos e projetos</h2>
     <p>
       Na ficha de quem passou por mais de um mandato no período, dá para ver cada mandato separado. Uma lei
       conta no mandato em que foi publicada; um projeto, no mandato em que foi protocolado. Na Câmara do
+      Rio, as leis vão até 2017 (mandato 2017–2020), mas os projetos, as votações e a frequência só estão
+      disponíveis a partir de 2021: nesse mandato, a ficha mostra só as leis. Na Câmara do
       Rio, o projeto aparece como “virou lei” quando a ficha da lei aponta para ele como projeto de origem.
+    </p>
+    <p>
+      As cores separam, não julgam: tons de ocre para as simbólicas e azul para as regras e políticas.
+      Uma homenagem pode ser justa e uma regra nova pode ser ruim; o site só mostra o que cada lei faz.
     </p>
     <p>
       Tombamento é um caso de fronteira: tem efeito jurídico sobre o imóvel, mas entra na mesma família de
@@ -94,7 +111,7 @@ const exemplos = [
     <h2 class="display">Limites</h2>
     <ul>
       <li>As votações simbólicas (a maioria) não registram quem votou o quê e não aparecem aqui.</li>
-      <li>Os nomes dos autores são casados por texto; ex-{casas[0]?.membros ?? 'parlamentares'} de antes de {casas[0]?.ano_inicial} aparecem sem ficha.</li>
+      <li>Os nomes dos autores são casados por texto; quem não exerceu mandato a partir de {casas[0]?.ano_inicial} aparece sem ficha, mesmo com leis de antes.</li>
       <li>A classificação lê só a ementa. Uma lei com ementa vaga pode estar na categoria ou no tema errado; se achar uma, avise.</li>
     </ul>
     <p class="rubrica">{num(casas.reduce((a, m) => a + m.leis.total, 0))} leis classificadas.</p>

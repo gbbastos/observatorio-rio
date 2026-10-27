@@ -109,7 +109,7 @@ _TERMOS = {
     "administracao": r"""servidor\w*|funcionalismo|cargos?|carreira\w*|quadro de pessoal|quadro permanente|
         plano de cargos|vencimentos?|remunerac\w*|salari\w*|gratificac\w*|subsidios?|piso salarial|abono\w*|
         previdenc\w*|previ-?rio|funprevi|aposentad\w*|pensao|pensoes|concursos? publicos?|estagi\w*|
-        comissionad\w*|estrutura (administrativa|organizacional|basica)|reestrutura\w*|secretarias?|
+        comissionad\w*|estrutura (administrativa|organizacional|basica)|reestrutura\w*|
         autarquia\w*|empresa publica|fundacao (municipal|publica)|orgaos?|administracao (publica|direta|indireta)|
         licitac\w*|contratos?|compras publicas|pregao|parcerias? publico-?privadas?|ppp|concessoes? de servic\w*|
         permissao de uso|cessao de uso|doacao de (imove(l|is)|bens?|area)|alienacao|desafeta\w*|
@@ -120,6 +120,27 @@ _TERMOS = {
         lei organica|poder legislativo|prefeito|vice-prefeito|subprefeitura\w*|regiao administrativa|
         regioes administrativas|guarda-vidas""",
 }
+
+# Órgãos do município e do estado: nos pedidos de informação, quem é perguntado diz o assunto
+# ("Requer à SMTR informações sobre..."). Somam-se aos termos de cada tema.
+_ORGAOS = {
+    "saude": r"secretarias? (municipal|estadual) de saude|sms|ses|riosaude|subpav",
+    "educacao": r"secretarias? (municipal|estadual) de educacao|sme|seeduc|multirio|faetec|uerj",
+    "direitos": r"smas|assistencia social|smpd|secretarias? (municipal|estadual) d[ao] mulher|spm|smdhi|"
+                r"envelhecimento saudavel",
+    "transporte": r"smtr|secretarias? (municipal|estadual) de transportes?|cet-?rio|engenharia de trafego|mobi-?rio|setram|supervia|"
+                  r"metrorio|ccr barcas",
+    "seguranca": r"seop|gm-?rio|sepol|pmerj|pcerj|seap|cbmerj|centro de operacoes",
+    "ambiente": r"smac|comlurb|limpeza urbana|parques e jardins|fpj|inea",
+    "urbanismo": r"seconserva|conservacao|smi|smdu|smh|rio-?aguas|instituto das aguas|geo-?rio|rio-?urbe|cdurp|"
+                 r"cedae|aguas do rio|rioluz|light|urbanismo",
+    "economia": r"smde|smdeis|desenvolvimento economico|trabalho e renda|smte|jucerja|codin",
+    "cultura": r"smc|irph|rio patrimonio|secretarias? (municipal|estadual) de cultura|smel|esportes? e lazer|riotur|rioarte|"
+               r"cidade das artes|planetario",
+    "tributos": r"smf|smfp|fazenda|controladoria geral|cgm",
+    "administracao": r"casa civil|gabinete do prefeito|procuradoria geral|pgm|iplanrio|segovi|1746",
+}
+_TERMOS = {t: f"{p}|{_ORGAOS[t]}" for t, p in _TERMOS.items()}
 
 _REGRAS = {t: re.compile(r"\b(?:" + re.sub(r"\s*\n\s*", "", p) + r")\b") for t, p in _TERMOS.items()}
 

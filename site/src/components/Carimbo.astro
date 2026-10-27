@@ -1,11 +1,11 @@
 ---
-// Carimbo de cartório com a categoria da lei. Vermelho para as simbólicas, tinta para o resto.
+// Carimbo de cartório com a categoria da lei. Ocre para as simbólicas, tinta para o resto.
 import { ROTULO_CURTO } from '../lib/formatar';
 
-interface Props { categoria?: string | null; texto?: string; tom?: 'vermelho' | 'tinta'; pequeno?: boolean }
+interface Props { categoria?: string | null; texto?: string; tom?: 'vermelho' | 'ocre' | 'tinta'; pequeno?: boolean }
 const { categoria, texto, tom, pequeno = false } = Astro.props;
 const rotulo = texto ?? (categoria ? ROTULO_CURTO[categoria] ?? categoria : '');
-const cor = tom ?? (categoria && categoria !== 'normativa' ? 'vermelho' : 'tinta');
+const cor = tom ?? (categoria && categoria !== 'normativa' ? 'ocre' : 'tinta');
 // inclinação estável por texto, para os carimbos não parecerem todos iguais
 let h = 0;
 for (const c of rotulo) h = (h * 17 + c.charCodeAt(0)) % 7;
@@ -33,6 +33,7 @@ const giro = (h - 3) * 0.6;
     mask-size: 120px 40px;
   }
   .vermelho { color: var(--carimbo); }
+  .ocre { color: var(--ocre); }
   .tinta { color: var(--tinta-2); }
   .pequeno { font-size: 10px; padding: 3px 5px 2px; border-width: 1.5px; }
 </style>

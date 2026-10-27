@@ -6,6 +6,7 @@ import { casasDisponiveis, meta, votacoes, votacao, porId, type Casa } from '../
 import { corPartido } from '../../../lib/partidos';
 import { ordenarPorBancada } from '../../../lib/plenario';
 import { u, dataLonga, ementa, rotuloNorma, ROTULO_VOTO } from '../../../lib/formatar';
+import { ROTULO_TEMA } from '../../../lib/categorias';
 
 export function getStaticPaths() {
   return casasDisponiveis().flatMap((casa) => votacoes(casa).map((v) => ({ params: { casa, id: v.id } })));
@@ -64,7 +65,9 @@ const titulo = v.proposicao.id ? rotuloNorma(v.proposicao.id) : 'Votação nomin
       <h1 class="display">{titulo}</h1>
       <p class="ementa">{ementa(v.proposicao.ementa)}</p>
       <p class="meta">
-        {v.proposicao.categoria && v.proposicao.categoria !== 'normativa' && <Carimbo categoria={v.proposicao.categoria} />}
+        {v.proposicao.categoria && v.proposicao.categoria !== 'normativa'
+          ? <Carimbo categoria={v.proposicao.categoria} />
+          : v.proposicao.tema && <Carimbo texto={ROTULO_TEMA[v.proposicao.tema]} tom="tinta" />}
         <Carimbo texto={v.resultado ?? 'sem resultado'} tom={v.resultado === 'aprovado' ? 'tinta' : 'vermelho'} />
         {v.proposicao.autores.length > 0 && <span class="rubrica">Autoria: {v.proposicao.autores.join(', ')}</span>}
       </p>

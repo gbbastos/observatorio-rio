@@ -49,6 +49,12 @@ class Casa:
     pasta_detalhe: str      # static-vereadores ou static-deputados
     fonte_tomoyo: tuple[str, str]
     normas: Path | None = None   # sem normas, a casa entra só com projetos, votações e presença
+    ano_inicial_leis: int | None = None   # as leis podem ir mais atrás que os dados da Tomoyo
+    legislaturas_extras: tuple[dict[str, Any], ...] = ()   # legislaturas que só têm leis
+
+    @property
+    def desde_leis(self) -> int:
+        return self.ano_inicial_leis or self.ano_inicial
 
 
 CASAS = {
@@ -60,6 +66,8 @@ CASAS = {
         fonte_tomoyo=("Tomoyo / como-votou (vereadores, proposições, votações nominais, presença)",
                       "https://github.com/Tomoyo-Computer-Science-Research-Unit/como-votou"),
         normas=config.DATA_DIR / "camara" / "normas.json",
+        ano_inicial_leis=config.ANO_INICIAL_LEIS,
+        legislaturas_extras=tuple(config.LEGISLATURAS_EXTRAS_CAMARA),
     ),
     "alerj": Casa(
         id="alerj", nome="Assembleia Legislativa do Estado do Rio de Janeiro", curto="ALERJ",
@@ -126,16 +134,17 @@ def tema_de(categoria: str | None, ementa: str, texto: str | None = None) -> str
     return T.tema(ementa, texto) if categoria and not C.simbolica(categoria) else None
 
 
-def mandatos_da_casa(legislaturas: list[dict[str, Any]], ano_inicial: int) -> list[dict[str, Any]]:
+def mandatos_da_casa(legislaturas: list[dict[str, Any]], ano_inicial: int,
+                     so_leis: set[int]) -> list[dict[str, Any]]:
     """Legislaturas cobertas pelos dados, com rótulo em anos ("2021–2024"; a da ALERJ que acaba em
-    31/1/2023 vira "2019–2022")."""
+    31/1/2023 vira "2019–2022"). `so_leis`: as que só têm leis (sem projetos, votos e presença)."""
     out = []
     for lg in legislaturas:
         if int(lg["fim"][:4]) < ano_inicial:
             continue
         fim = int(lg["fim"][:4]) - (1 if lg["fim"][5:7] == "01" else 0)
         out.append({"leg": int(lg["numero"]), "inicio": lg["inicio"], "fim": lg["fim"],
-                    "rotulo": f"{lg['inicio'][:4]}–{fim}"})
+                    "rotulo": f"{lg['inicio'][:4]}–{fim}", "so_leis": int(lg["numero"]) in so_leis})
     return out
 
 
@@ -148,7 +157,7 @@ def montar_normas(casa: Casa, resolver: NameResolver, slugs: dict[str, str], nom
     leis: list[dict[str, Any]] = []
     nao_casados: Counter[str] = Counter()
     for n in doc["normas"]:
-        if n["ano"] < casa.ano_inicial or n["tipo"] not in ("LEI", "LC", "DL"):
+        if n["ano"] < casa.desde_leis or n["tipo"] not in ("LEI", "LC", "DL"):
             continue
         autores: list[dict[str, Any]] = []
         vistos: set[str] = set()
@@ -207,8 +216,8 @@ def montar(casa: Casa) -> None:
         shutil.rmtree(fotos)
     fotos.mkdir(parents=True, exist_ok=True)
 
-    legislaturas = estatico["legislaturas"]
-    mandatos = mandatos_da_casa(legislaturas, casa.ano_inicial)
+    legislaturas = sorted([*casa.legislaturas_extras, *estatico["legislaturas"]], key=lambda lg: int(lg["numero"]))
+    mandatos = mandatos_da_casa(legislaturas, casa.desde_leis, {int(lg["numero"]) for lg in casa.legislaturas_extras})
     legs_cobertas = {m["leg"] for m in mandatos}
 
     leis, nao_casados, coletado_em = montar_normas(casa, resolver, slugs, nome_por_id, resumos, legislaturas)
@@ -232,6 +241,7 @@ def montar(casa: Casa) -> None:
         completo = ler_json(arq) if arq.exists() else {}
         prop = vt.get("proposicao") or {}
         ementa = consertar(completo.get("proposicao", {}).get("ementa") or prop.get("ementa"))
+        cat_vt = C.classificar(ementa) if ementa else None
         resumo = {
             "id": slug, "data": vt["data"], "legislatura": vt.get("legislatura"),
             "sessao": {k: consertar(x) for k, x in (vt.get("sessao") or {}).items()},
@@ -239,7 +249,7 @@ def montar(casa: Casa) -> None:
                 "id": prop.get("id"), "tipo": prop.get("tipo"), "ementa": ementa,
                 "autores": [nome_por_id.get(i, i) for i in prop.get("autores_ids") or []]
                            or [nome_bonito(consertar(a)) for a in prop.get("autores") or []],
-                "categoria": C.classificar(ementa) if ementa else None,
+                "categoria": cat_vt, "tema": tema_de(cat_vt, ementa) if ementa else None,
             },
             "objeto": vt.get("objeto"), "resultado": vt.get("resultado"),
             "resultado_frase": consertar(completo.get("resultado_frase")),
@@ -288,7 +298,9 @@ def montar(casa: Casa) -> None:
             cat = C.classificar(p["ementa"]) if classificavel else None
             item = {"id": p["id"], "tipo": p["tipo"], "data": p.get("data"), "ementa": consertar(p["ementa"]),
                     "categoria": cat, "simbolica": C.simbolica(cat) if cat else None,
-                    "tema": tema_de(cat, p["ementa"]) if p["tipo"] in TIPOS_PROJETO else None,
+                    # pedidos de informação também ganham tema (o assunto ou o órgão perguntado)
+                    "tema": (tema_de(cat, p["ementa"]) if p["tipo"] in TIPOS_PROJETO
+                             else T.tema(p["ementa"]) if p["tipo"] == "REQINF" else None),
                     "leg": legislatura_of(p.get("data") or f"{p['ano']}-07-01", legislaturas),
                     "lei": lei_do_projeto.get(p["id"]),
                     "coautores": len(p.get("coautores") or [])}
@@ -363,6 +375,7 @@ def montar(casa: Casa) -> None:
     meta = {
         "casa": casa.id, "nome": casa.nome, "curto": casa.curto, "membro": casa.membro, "membros": casa.membros,
         "cadeiras": casa.cadeiras, "legislatura_atual": leg_atual, "ano_inicial": casa.ano_inicial,
+        "ano_inicial_leis": casa.desde_leis,
         "mandatos": mandatos,
         "tem_leis": tem_leis,
         "atualizado_em": max(filter(None, [estatico["generated_at"], coletado_em])),
@@ -389,7 +402,7 @@ def montar(casa: Casa) -> None:
     print(f"[{casa.id}] {len(lista)} parlamentares, {len(leis)} normas, {len(projetos)} projetos, "
           f"{len(votacoes)} votações")
     if tem_leis:
-        print(f"[{casa.id}] leis desde {casa.ano_inicial}: {meta['leis']['total']}, "
+        print(f"[{casa.id}] leis desde {casa.desde_leis}: {meta['leis']['total']}, "
               f"simbólicas {meta['leis']['simbolicas']}; autores sem casamento: {sum(nao_casados.values())}")
     print(f"[{casa.id}] projetos desde {casa.ano_inicial}: {meta['projetos']['total']}, "
           f"simbólicos {meta['projetos']['simbolicas']}")

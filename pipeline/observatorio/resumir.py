@@ -44,7 +44,7 @@ def pendentes(resumos: dict[str, str]) -> list[dict]:
     normas = json.loads(NORMAS.read_text(encoding="utf-8"))["normas"]
     out = []
     for n in normas:
-        if n["tipo"] not in ("LEI", "LC") or n["ano"] < config.ANO_INICIAL or n["id"] in resumos:
+        if n["tipo"] not in ("LEI", "LC") or n["ano"] < config.ANO_INICIAL_LEIS or n["id"] in resumos:
             continue
         if C.simbolica(C.classificar(n["ementa"], tema_camara=n.get("tema_camara"))):
             continue

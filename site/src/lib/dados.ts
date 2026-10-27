@@ -13,7 +13,11 @@ export interface ResumoLeis {
 }
 
 /** Legislatura coberta pelos dados ("2021–2024"). */
-export interface Mandato { leg: number; inicio: string; fim: string; rotulo: string }
+export interface Mandato {
+  leg: number; inicio: string; fim: string; rotulo: string;
+  /** só há leis deste mandato (sem projetos, votações e presença) */
+  so_leis: boolean;
+}
 
 export interface Meta {
   casa: Casa;
@@ -23,7 +27,10 @@ export interface Meta {
   membros: string;
   cadeiras: number;
   legislatura_atual: { numero: number; inicio: string; fim: string };
+  /** início de projetos, votações e presença */
   ano_inicial: number;
+  /** início das leis aprovadas (na Câmara, uma legislatura antes) */
+  ano_inicial_leis: number;
   mandatos: Mandato[];
   /** false quando a casa não tem base de leis aprovadas (ALERJ): o site mostra os projetos apresentados */
   tem_leis: boolean;
@@ -105,7 +112,8 @@ export interface Lei {
 export interface Votacao {
   id: string; data: string; legislatura: number | null;
   sessao: { tipo?: string; numero?: string; fase?: string };
-  proposicao: { id: string | null; tipo: string | null; ementa: string | null; autores: string[]; categoria: string | null };
+  proposicao: { id: string | null; tipo: string | null; ementa: string | null; autores: string[];
+    categoria: string | null; tema: string | null };
   objeto: string | null; resultado: string | null; resultado_frase: string | null;
   contagem: { sim: number; nao: number; abstencao: number; presentes_votando?: number } | null;
   lado_vencedor: string | null; fonte: string | null;

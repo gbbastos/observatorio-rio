@@ -1,13 +1,14 @@
-// Ordem e cor das categorias: os tons de vermelho são as simbólicas, a tinta é o resto.
+// Ordem e cor das categorias: tons de ocre para as simbólicas, azul para regras e políticas. Nada de
+// vermelho: a cor não deve sugerir que homenagem é "ruim", só separar uma coisa da outra.
 export const ORDEM_CATEGORIAS = ['calendario', 'patrimonio', 'logradouro', 'utilidade_publica', 'honraria', 'normativa'];
 
 export const COR_CATEGORIA: Record<string, string> = {
-  calendario: '#cf2e1b',
-  patrimonio: '#e8664f',
-  logradouro: '#9e1f10',
-  utilidade_publica: '#f09a86',
-  honraria: '#f2c2b5',
-  normativa: 'var(--tinta)',
+  calendario: 'var(--cat-calendario)',
+  patrimonio: 'var(--cat-patrimonio)',
+  logradouro: 'var(--cat-logradouro)',
+  utilidade_publica: 'var(--cat-utilidade)',
+  honraria: 'var(--cat-honraria)',
+  normativa: 'var(--cat-regras)',
 };
 
 /** O que entra em cada categoria, em uma ou duas frases (glossário da ficha e página de método). */
@@ -24,6 +25,13 @@ export const DEFINICAO_CATEGORIA: Record<string, string> = {
 export const ORDEM_TEMAS = ['saude', 'educacao', 'direitos', 'transporte', 'seguranca', 'ambiente', 'urbanismo',
   'economia', 'cultura', 'tributos', 'administracao', 'outros'];
 
+/** Tema no meio de uma frase ("sobretudo saúde, urbanismo e transporte"). */
+export const TEMA_FRASE: Record<string, string> = {
+  saude: 'saúde', educacao: 'educação', direitos: 'direitos sociais', transporte: 'transporte',
+  seguranca: 'segurança', ambiente: 'meio ambiente', urbanismo: 'urbanismo', economia: 'economia',
+  cultura: 'cultura', tributos: 'finanças públicas', administracao: 'administração pública',
+};
+
 export const ROTULO_TEMA: Record<string, string> = {
   saude: 'Saúde',
   educacao: 'Educação',
@@ -39,9 +47,10 @@ export const ROTULO_TEMA: Record<string, string> = {
   outros: 'Outros',
 };
 
-/** Escala do vermelho para o "quanto da produção é simbólica" (0 = tinta, 1 = carimbo). */
+/** Escala do "quanto da produção é simbólica": azul (quase tudo regra e política) a ocre (quase tudo
+ *  simbólico), passando por cinza. Cores fixas: servem nos dois temas e no SVG do plenário. */
 export function corSimbolica(fracao: number): string {
-  const paradas = ['#2b2925', '#6e4a3c', '#a8402c', '#cf2e1b', '#ff4a2e'];
+  const paradas = ['#2f5d8a', '#5f7d9c', '#9a958c', '#bf9142', '#c9851a'];
   const i = Math.min(paradas.length - 1, Math.max(0, Math.round(fracao * (paradas.length - 1))));
   return paradas[i];
 }

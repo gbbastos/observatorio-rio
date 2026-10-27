@@ -2,9 +2,11 @@
 import Base from '../../layouts/Base.astro';
 import Carimbo from '../../components/Carimbo.astro';
 import ListaProducao, { type ItemProducao } from '../../components/ListaProducao.astro';
-import { casasDisponiveis, meta, parlamentares, parlamentar, votacoes, leis, type Casa } from '../../lib/dados';
+import ComoVotou from '../../components/ComoVotou.astro';
+import { casasDisponiveis, meta, parlamentares, parlamentar, leis, type Casa } from '../../lib/dados';
 import { corPartido } from '../../lib/partidos';
-import { u, num, pct, pctTaxa, dataCurta, ementa, rotuloNorma, ROTULO_VOTO } from '../../lib/formatar';
+import { TEMA_FRASE } from '../../lib/categorias';
+import { u, num, pct, pctTaxa, dataCurta, ementa, rotuloNorma } from '../../lib/formatar';
 
 export function getStaticPaths() {
   return casasDisponiveis().flatMap((casa) =>
@@ -14,7 +16,6 @@ export function getStaticPaths() {
 const casa = Astro.params.casa as Casa;
 const m = meta(casa);
 const p = parlamentar(casa, Astro.params.slug!);
-const votacaoPorId = new Map(votacoes(casa).map((v) => [v.id, v]));
 const urlLei = new Map(m.tem_leis ? leis(casa).map((l) => [l.id, l.url]) : []);
 
 // Com base de leis (Câmara), a ficha mostra o que foi aprovado e o que foi proposto; sem ela (ALERJ),
@@ -23,7 +24,8 @@ const temLeis = m.tem_leis;
 const leisOrd = p.lista_leis.filter((l) => l.tipo === 'LEI' || l.tipo === 'LC');
 const titulosDL = p.lista_leis.filter((l) => l.tipo === 'DL');
 const projetos = p.lista_proposicoes.filter((x) => x.tipo === 'PL' || x.tipo === 'PLC');
-const outras = p.lista_proposicoes.filter((x) => x.tipo !== 'PL' && x.tipo !== 'PLC');
+const pedidos = p.lista_proposicoes.filter((x) => x.tipo === 'REQINF');
+const outras = p.lista_proposicoes.filter((x) => !['PL', 'PLC', 'REQINF'].includes(x.tipo));
 
 const itensLeis: ItemProducao[] = leisOrd.map((l) => ({
   id: l.id, rotulo: rotuloNorma(l.id), url: l.url, data: l.data, ano: l.ano, ementa: l.ementa,
@@ -35,10 +37,30 @@ const itensProjetos: ItemProducao[] = projetos.map((x) => ({
   categoria: x.categoria ?? 'normativa', simbolica: !!x.simbolica, tema: x.tema, leg: x.leg,
   n_autores: 1 + x.coautores, lei: x.lei ? { rotulo: rotuloNorma(x.lei), url: urlLei.get(x.lei) ?? null } : null,
 }));
+const itensPedidos: ItemProducao[] = pedidos.map((x) => ({
+  id: x.id, rotulo: `Req. ${x.id.split('-').slice(1).join('-')}`, url: null, data: x.data, ano: x.id.split('/')[1],
+  ementa: ementa(x.ementa), categoria: 'normativa', simbolica: false, tema: x.tema, leg: x.leg, n_autores: 1 + x.coautores,
+}));
+
+/** Os três temas mais frequentes entre as regras e políticas, para a frase do topo. */
+function temasPrincipais(xs: { simbolica: boolean | null; tema: string | null }[]) {
+  const c: Record<string, number> = {};
+  for (const x of xs) if (!x.simbolica && x.tema && x.tema !== 'outros') c[x.tema] = (c[x.tema] ?? 0) + 1;
+  return Object.entries(c).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([t]) => TEMA_FRASE[t]);
+}
+const emLista = (xs: string[]) => xs.join(', ').replace(/, ([^,]*)$/, ' e $1');
 
 // --- mandatos ------------------------------------------------------------------------------
 // Quem passou por mais de uma legislatura coberta pelos dados ganha o seletor; "todos" é a soma.
+// As leis da Câmara vão até 2017, mas projetos, votos e presença (Tomoyo) só existem desde 2021: os
+// mandatos "só com leis" mostram esses números como sem dados.
+const anoLeis = temLeis ? m.ano_inicial_leis : m.ano_inicial;
+const anoOutros = m.ano_inicial;
 const mandatos = m.mandatos.filter((x) => p.mandatos.includes(x.leg));
+const soLeis = mandatos.filter((x) => x.so_leis);
+// quem chegou depois de 2017 tem "tudo" a partir do próprio primeiro mandato
+const desde = mandatos.length ? Math.max(anoLeis, Number(mandatos[0].rotulo.slice(0, 4))) : anoLeis;
+const semDados = `sem dados antes de ${anoOutros}`;
 const variosMandatos = mandatos.length > 1;
 const legDoAno = (ano: number) => m.mandatos.find((x) => Number(x.rotulo.slice(0, 4)) <= ano && ano <= Number(x.rotulo.slice(-4)))?.leg ?? null;
 
@@ -54,6 +76,7 @@ function numeros(leg: number | null) {
   return {
     leis: ls.length,
     leisSimb: ls.filter((l) => l.simbolica).length,
+    temas: temasPrincipais(temLeis ? ls : pls),
     peso: ls.reduce((s, l) => s + (l.n_autores ? 1 / l.n_autores : 0), 0),
     emGrupo: ls.filter((l) => l.n_autores > 1).length,
     pl: pls.length,
@@ -73,22 +96,30 @@ const inicial = p.nome.split(/\s+/).filter((x) => !/^(dr|dra|prof|profa)\.?$/i.t
 
 const visoes = [
   { chave: 'todos', leg: null as number | null,
-    quando: variosMandatos || mandatos.length === 0 ? `Desde ${m.ano_inicial}` : `No mandato ${mandatos[0].rotulo}`,
-    curto: 'Tudo', longo: ` desde ${m.ano_inicial}` },
+    quando: variosMandatos || mandatos.length === 0 ? `Desde ${desde}` : `No mandato ${mandatos[0].rotulo}`,
+    curto: 'Tudo', longo: ` desde ${desde}`, soLeis: false,
+    // no "tudo", projetos e votos começam depois das leis
+    sufixo: desde < anoOutros && (variosMandatos || mandatos.length === 0) ? ` desde ${anoOutros}` : '' },
   ...(variosMandatos ? mandatos.map((x) => ({ chave: String(x.leg), leg: x.leg as number | null,
-    quando: `No mandato ${x.rotulo}`, curto: x.rotulo, longo: '' })) : []),
+    quando: `No mandato ${x.rotulo}`, curto: x.rotulo, longo: '', soLeis: !!x.so_leis, sufixo: '' })) : []),
 ].map((v) => {
   const n = numeros(v.leg);
   const total = temLeis ? n.leis : n.pl;
   const simb = temLeis ? n.leisSimb : n.plSimb;
+  const regras = total - simb;
+  // primeiro o que cria regra ou política, com os temas; depois as homenagens, sem juízo de valor
+  const partes = [
+    regras && `${num(regras)} de regras e políticas${n.temas.length ? `, sobretudo em ${emLista(n.temas)}` : ''}`,
+    simb && `${num(simb)} de homenagens, ${temLeis ? 'nomes de rua' : 'nomes de lugar'}, datas comemorativas ou patrimônio`,
+  ].filter(Boolean).join('; ');
   const frase = temLeis
     ? (total
-      ? `${v.quando}, ${p.nome} (${p.partido}) assina ${num(total)} ${total === 1 ? 'lei aprovada' : 'leis aprovadas'} na ${m.curto}, ${num(n.emGrupo)} delas junto com colegas. ${num(simb)} (${pct(simb, total)}%) são nome de rua, data comemorativa, patrimônio ou homenagem.`
+      ? `${v.quando}, ${p.nome} (${p.partido}) assina ${num(total)} ${total === 1 ? 'lei aprovada' : 'leis aprovadas'} na ${m.curto}: ${partes}.${n.emGrupo ? ` ${num(n.emGrupo)} ${n.emGrupo === 1 ? 'foi assinada' : 'foram assinadas'} junto com colegas.` : ''}`
       : `${v.quando}, ${p.nome} (${p.partido}) não assina nenhuma lei aprovada na ${m.curto}.`)
     : (total
-      ? `${v.quando}, ${p.nome} (${p.partido}) apresentou ${num(total)} projetos de lei na ${m.curto}. ${num(simb)} (${pct(simb, total)}%) são data comemorativa, patrimônio, nome de lugar ou homenagem.`
+      ? `${v.quando}, ${p.nome} (${p.partido}) apresentou ${num(total)} ${total === 1 ? 'projeto' : 'projetos'} de lei na ${m.curto}: ${partes}.`
       : `${v.quando}, ${p.nome} (${p.partido}) não apresentou projetos de lei na ${m.curto}.`);
-  return { ...v, n, total, simb, frase, periodo: v.quando.replace(/^D/, 'd').replace(/^N/, 'n') };
+  return { ...v, n, total, simb, regras, frase, periodo: v.quando.replace(/^D/, 'd').replace(/^N/, 'n') };
 });
 const frase = visoes[0].frase;
 
@@ -101,7 +132,8 @@ function primeiros<T extends { leg: number | null }>(xs: T[], n: number): T[] {
     return i < n || k <= n;
   });
 }
-const votos = primeiros(p.lista_votos, 15).map((v) => ({ ...v, info: votacaoPorId.get(v.id) }));
+const semDadosDe = (oQue: string) =>
+  (soLeis.length ? { legs: soLeis.map((x) => x.leg), msg: `${oQue} só estão disponíveis a partir de ${anoOutros}.` } : undefined);
 const outrasCurtas = primeiros(outras, 12);
 const honrariasCurtas = primeiros(titulosDL, 10);
 const anosPresenca = Object.entries(p.presenca).sort((a, b) => Number(b[0]) - Number(a[0]));
@@ -121,7 +153,7 @@ const NOME_TIPO: Record<string, string> = {
         <span class="faixa rubrica">{p.partido}</span>
       </div>
       <div class="identidade">
-        <p class="rubrica">{situacao}{mandatos.length > 0 && ` · ${mandatos.length > 1 ? 'mandatos' : 'mandato'} ${mandatos.map((x) => x.rotulo).join(' e ')}`}</p>
+        <p class="rubrica">{situacao}{mandatos.length > 0 && ` · ${mandatos.length > 1 ? 'mandatos' : 'mandato'} ${mandatos.map((x) => x.rotulo).join(', ').replace(/, ([^,]*)$/, ' e $1')}`}</p>
         <h1 class="display">{p.nome}</h1>
         {p.nome_civil && p.nome_civil !== p.nome && <p class="civil">{p.nome_civil}</p>}
         {visoes.map((v, i) => <p class="frase" data-mandato-so={v.chave} hidden={i > 0}>{v.frase}</p>)}
@@ -153,16 +185,16 @@ const NOME_TIPO: Record<string, string> = {
               <span class="rubrica">leis aprovadas {v.periodo}</span>
             </div>
             <div class="celula">
-              <span class="numero-gigante vermelho">{pct(v.n.leisSimb, v.n.leis)}%</span>
-              <span class="rubrica">simbólicas ({num(v.n.leisSimb)})</span>
+              <span class="numero-gigante azul-regras">{num(v.regras)}</span>
+              <span class="rubrica">de regras e políticas ({pct(v.regras, v.total)}%)</span>
+            </div>
+            <div class="celula">
+              <span class="numero-gigante ocre">{num(v.simb)}</span>
+              <span class="rubrica">simbólicas: homenagens, nomes, datas e patrimônio ({pct(v.simb, v.total)}%)</span>
             </div>
             <div class="celula">
               <span class="numero-gigante">{num(v.n.peso, 1)}</span>
               <span class="rubrica">peso real: cada lei dividida pelo nº de autores</span>
-            </div>
-            <div class="celula">
-              <span class="numero-gigante">{num(v.n.pl)}</span>
-              <span class="rubrica">projetos de lei apresentados; {num(v.n.virou)} viraram lei</span>
             </div>
           </>
         ) : (
@@ -172,34 +204,42 @@ const NOME_TIPO: Record<string, string> = {
               <span class="rubrica">projetos de lei apresentados {v.periodo}</span>
             </div>
             <div class="celula">
-              <span class="numero-gigante vermelho">{pct(v.n.plSimb, v.n.pl)}%</span>
-              <span class="rubrica">simbólicos ({num(v.n.plSimb)})</span>
+              <span class="numero-gigante azul-regras">{num(v.regras)}</span>
+              <span class="rubrica">de regras e políticas ({pct(v.regras, v.total)}%)</span>
+            </div>
+            <div class="celula">
+              <span class="numero-gigante ocre">{num(v.simb)}</span>
+              <span class="rubrica">simbólicos: homenagens, nomes, datas e patrimônio ({pct(v.simb, v.total)}%)</span>
             </div>
             <div class="celula">
               <span class="numero-gigante">{num(v.n.mocoes)}</span>
               <span class="rubrica">moções de aplauso, louvor ou repúdio</span>
             </div>
-            <div class="celula">
-              <span class="numero-gigante">{num(v.n.indicacoes)}</span>
-              <span class="rubrica">indicações (pedidos ao governo)</span>
-            </div>
           </>
         )}
+        {!temLeis && (
+          <div class="celula">
+            <span class="numero-gigante">{num(v.n.indicacoes)}</span>
+            <span class="rubrica">indicações (pedidos ao governo)</span>
+          </div>
+        )}
+        {temLeis && (
+          <div class="celula">
+            <span class="numero-gigante">{v.soLeis ? '—' : num(v.n.pl)}</span>
+            <span class="rubrica">{v.soLeis ? `projetos de lei: ${semDados}` : `projetos de lei apresentados${v.sufixo}; ${num(v.n.virou)} viraram lei`}</span>
+          </div>
+        )}
         <div class="celula">
-          <span class="numero-gigante">{num(v.n.reqinf)}</span>
-          <span class="rubrica">requerimentos de informação (fiscalização)</span>
+          <span class="numero-gigante">{v.soLeis ? '—' : num(v.n.reqinf)}</span>
+          <span class="rubrica">pedidos de informação ao Executivo{v.soLeis ? `: ${semDados}` : v.sufixo}</span>
         </div>
         <div class="celula">
-          <span class="numero-gigante">{num(temLeis ? v.n.titulos : v.n.honrarias)}</span>
-          <span class="rubrica">títulos e medalhas {temLeis ? 'concedidos' : 'propostos'}</span>
+          <span class="numero-gigante">{v.soLeis ? '—' : pctTaxa(v.n.participacao)}</span>
+          <span class="rubrica">presença nas votações nominais{v.soLeis ? `: ${semDados}` : v.sufixo}</span>
         </div>
         <div class="celula">
-          <span class="numero-gigante">{pctTaxa(v.n.participacao)}</span>
-          <span class="rubrica">presença nas votações nominais</span>
-        </div>
-        <div class="celula">
-          <span class="numero-gigante">{num(v.n.contraPartido)}</span>
-          <span class="rubrica">votos contra a maioria do partido</span>
+          <span class="numero-gigante">{v.soLeis ? '—' : num(v.n.contraPartido)}</span>
+          <span class="rubrica">votos contra a maioria do partido{v.soLeis ? `: ${semDados}` : v.sufixo}</span>
         </div>
       </section>
     ))}
@@ -211,24 +251,36 @@ const NOME_TIPO: Record<string, string> = {
 
     {itensProjetos.length > 0 ? (
       <ListaProducao id="projetos" titulo="O que propôs" plural="projetos de lei"
-                     sub={`protocolados com o nome de ${p.nome}`} feminino={false}
+                     sub={`protocolados${desde < anoOutros ? ` desde ${anoOutros}` : ''} com o nome de ${p.nome}`} feminino={false}
+                     semDados={semDadosDe('Os projetos protocolados')}
                      itens={itensProjetos} extra={temLeis ? 'virou' : undefined}
                      nota={temLeis ? 'Conta os projetos em que o nome já aparece no protocolo. Muitas leis ganham coautores durante a tramitação, por isso o número de leis aprovadas pode passar o de projetos que viraram lei.' : undefined} />
     ) : (
       <section class="secao">
         <header><h2 class="display">O que propôs</h2></header>
-        <p class="rubrica">Nenhum projeto de lei protocolado desde {m.ano_inicial}.</p>
+        <p class="rubrica">Nenhum projeto de lei protocolado desde {anoOutros}.</p>
       </section>
+    )}
+
+    <ComoVotou casa={casa} votos={p.lista_votos} semDados={semDadosDe('As votações nominais')} />
+
+    {itensPedidos.length > 0 && (
+      <ListaProducao id="pedidos" titulo="O que perguntou" plural="pedidos de informação"
+                     sub={`ao Executivo${desde < anoOutros ? ` desde ${anoOutros}` : ''} com o nome de ${p.nome}`} feminino={false}
+                     itens={itensPedidos} categorias={false} rotuloTemas="Por tema" limite={20}
+                     semDados={semDadosDe('Os pedidos de informação')}
+                     nota="O requerimento de informação obriga o governo a responder e é a principal ferramenta de fiscalização. A quantidade não diz a qualidade: o tema e o texto de cada pedido estão abaixo." />
     )}
 
     <div class="duas-colunas">
       <section class="secao">
         <header>
           <h2 class="display">Outras proposições</h2>
-          <span class="rubrica">{temLeis ? 'pedidos de informação, títulos, resoluções' : 'indicações, moções, pedidos de informação'}</span>
+          <span class="rubrica">{temLeis ? 'títulos, resoluções, emendas à Lei Orgânica' : 'indicações, moções, títulos'}</span>
         </header>
         {outras.length === 0 ? <p class="rubrica">Nada encontrado.</p> : (
           <ul class="lista-simples" data-lista-curta data-limite="12">
+            {soLeis.map((x) => <li class="aviso rubrica" data-leg={x.leg} data-aviso hidden>Sem dados de {x.rotulo}: as proposições só estão disponíveis a partir de {anoOutros}.</li>)}
             {outrasCurtas.map((x, i) => (
               <li data-leg={x.leg ?? ''} hidden={i >= 12}>
                 <span class="rubrica">{dataCurta(x.data)} · {NOME_TIPO[x.tipo] ?? x.tipo} {x.id.split('-').slice(1).join('-')}</span>
@@ -240,36 +292,14 @@ const NOME_TIPO: Record<string, string> = {
         )}
       </section>
 
-      <section class="secao">
-        <header>
-          <h2 class="display">Como votou</h2>
-          <span class="rubrica">últimas votações nominais</span>
-        </header>
-        {votos.length === 0 ? <p class="rubrica">Nenhuma votação nominal registrada.</p> : (
-          <ul class="lista-simples" data-lista-curta data-limite="15">
-            {votos.map((v, i) => (
-              <li data-leg={v.leg ?? ''} hidden={i >= 15}>
-                <span class="rubrica">{dataCurta(v.info?.data)} · {v.info?.proposicao.id ? rotuloNorma(v.info.proposicao.id) : v.info?.objeto}</span>
-                <a class="ementa-curta" href={u(`/${casa}/votacoes/${v.id}/`)}>{ementa(v.info?.proposicao.ementa)}</a>
-                <span class="votos-linha">
-                  <span class:list={['voto', `voto-${v.voto}`]}>{ROTULO_VOTO[v.voto] ?? v.voto}</span>
-                  {v.contra_partido && <span class="contra rubrica">contra o partido</span>}
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-    </div>
-
-    {(titulosDL.length > 0 || anosPresenca.length > 0) && (
-      <div class="duas-colunas">
+      <div>
         {anosPresenca.length > 0 && (
           <section class="secao">
             <header><h2 class="display">Faltas</h2><span class="rubrica">frequência mensal publicada pela casa</span></header>
             <table class="tabela">
               <thead><tr><th>Ano</th><th>Faltas</th><th>Abonadas</th><th>Sem justificativa</th></tr></thead>
               <tbody data-lista-curta>
+                {soLeis.map((x) => <tr data-leg={x.leg} data-aviso hidden><td colspan="4" class="aviso rubrica">Sem dados de {x.rotulo}: a frequência só está disponível a partir de {anoOutros}.</td></tr>)}
                 {anosPresenca.map(([ano, f]) => (
                   <tr data-leg={legDoAno(Number(ano)) ?? ''}><td>{ano}</td><td>{f.faltas}</td><td>{f.abonadas}</td><td class:list={[{ vermelho: f.total > 0 }]}>{f.total}</td></tr>
                 ))}
@@ -288,7 +318,7 @@ const NOME_TIPO: Record<string, string> = {
           </section>
         )}
       </div>
-    )}
+    </div>
   </article>
 </Base>
 
@@ -318,13 +348,7 @@ const NOME_TIPO: Record<string, string> = {
   .lista-simples li { display: grid; gap: 4px; padding: 12px 0; border-bottom: 1px solid var(--linha); justify-items: start; }
   .lista-simples li[hidden], .tabela tr[hidden] { display: none; }
   .ementa-curta { font-size: 17px; line-height: 1.35; text-decoration: none; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
-  .votos-linha { display: flex; gap: 10px; align-items: center; }
-  .voto { font-family: var(--f-mono); font-size: 13px; text-transform: uppercase; font-weight: 700; padding: 2px 8px; border: 1.5px solid currentColor; }
-  .voto-sim { color: var(--verde); }
-  .voto-nao { color: var(--carimbo); }
-  .voto-abstencao { color: var(--ambar); }
-  .voto-ausente, .voto-presidindo { color: var(--tinta-3); border-style: dashed; }
-  .contra { color: var(--carimbo); font-size: 11px; }
+  .aviso { color: var(--tinta-3); font-size: 12px; line-height: 1.5; }
   .tabela { width: 100%; border-collapse: collapse; font-family: var(--f-mono); font-size: 14px; }
   .tabela th, .tabela td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--linha); }
   .tabela th { font-weight: 400; color: var(--tinta-3); text-transform: uppercase; font-size: 11px; letter-spacing: 0.08em; }
@@ -353,15 +377,12 @@ const NOME_TIPO: Record<string, string> = {
   type Estado = { filtro: string; tema: string; limite: number };
   const estados = new Map<HTMLElement, Estado>();
 
+  // filtro "campo:valor" compara com data-campo do item; valor vazio quer o campo ausente
   function passa(li: HTMLElement, e: Estado) {
-    const f = e.filtro;
     if (e.tema) return !li.dataset.simb && li.dataset.tema === e.tema;
-    return f === 'todas'
-      || (f === 'simbolica' && !!li.dataset.simb)
-      || (f === 'normativa' && !li.dataset.simb)
-      || (f === 'grupo' && !!li.dataset.grupo)
-      || (f === 'virou' && !!li.dataset.virou)
-      || (f.startsWith('cat:') && li.dataset.cat === f.slice(4));
+    if (e.filtro === 'todas') return true;
+    const [campo, valor] = e.filtro.split(':');
+    return valor ? li.dataset[campo] === valor : !li.dataset[campo];
   }
 
   function aplicarSecao(secao: HTMLElement) {
@@ -404,7 +425,10 @@ const NOME_TIPO: Record<string, string> = {
     const mais = secao.querySelector<HTMLElement>('[data-mais]')!;
     mais.hidden = visiveis <= e.limite;
     mais.querySelector('[data-faltam]')!.textContent = nf(visiveis - e.limite);
-    secao.querySelector<HTMLElement>('[data-vazio]')!.hidden = visiveis > 0;
+    const vazio = secao.querySelector<HTMLElement>('[data-vazio]')!;
+    vazio.hidden = visiveis > 0;
+    const semDados = (secao.dataset.semDados ?? '').split(',').includes(mandato);
+    vazio.textContent = semDados ? secao.dataset.msgSemDados! : 'Nada neste filtro.';
 
     secao.querySelectorAll<HTMLElement>('[data-filtro]').forEach((b) =>
       b.setAttribute('aria-pressed', String(!e.tema && b.dataset.filtro === e.filtro)));
@@ -413,13 +437,15 @@ const NOME_TIPO: Record<string, string> = {
   }
 
   function aplicarMandato() {
+    ficha.dataset.mandato = mandato;
+    document.dispatchEvent(new CustomEvent('mandato'));
     ficha.querySelectorAll<HTMLElement>('[data-mandato-so]').forEach((el) => { el.hidden = el.dataset.mandatoSo !== mandato; });
     ficha.querySelectorAll<HTMLElement>('[data-mandato]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.mandato === mandato)));
     ficha.querySelectorAll<HTMLElement>('[data-lista-curta]').forEach((lista) => {
       const limite = Number(lista.dataset.limite ?? Infinity);
       let n = 0;
       for (const el of lista.children as HTMLCollectionOf<HTMLElement>) {
-        const ok = doMandato(el);
+        const ok = el.dataset.aviso !== undefined ? el.dataset.leg === mandato : doMandato(el);
         el.hidden = !ok || n >= limite;
         if (ok) n++;
       }
@@ -441,7 +467,7 @@ const NOME_TIPO: Record<string, string> = {
           e.tema = '';
         } else {
           e.tema = e.tema === alvo.dataset.tema ? '' : alvo.dataset.tema!;
-          e.filtro = 'normativa';
+          e.filtro = 'simb:';
         }
         e.limite = Number(secao.dataset.limite);
       }

@@ -9,7 +9,9 @@ O site mostra, para cada vereador e deputado estadual:
 - as leis aprovadas (Câmara) e os projetos de lei protocolados (Câmara e ALERJ), classificados pela
   ementa: as cinco categorias simbólicas e, no resto ("regras e políticas"), o tema (saúde, educação,
   transporte...); na Câmara, cada projeto que virou lei aponta para a lei;
-- tudo separado por mandato, para quem passou por mais de uma legislatura;
+- tudo separado por mandato, para quem passou por mais de uma legislatura (na Câmara, as leis vão
+  até 2017; projetos, votações e presença, até 2021);
+- como votou em cada votação nominal e os pedidos de informação ao Executivo, filtráveis por tema;
 - o **peso real** da autoria (uma lei com 20 coautores vale 1/20 para cada um);
 - requerimentos de informação (fiscalização), títulos e medalhas, moções;
 - presença e votos nas votações nominais;
@@ -58,7 +60,7 @@ cd ../../..
 
 # 2. leis da Câmara e montagem dos dados do site
 cd pipeline
-python -m observatorio.coletar          # ~50 min na primeira vez (uma ficha por lei); depois só as novas
+python -m observatorio.coletar          # ~1 h na primeira vez (uma ficha por lei, desde 2017); depois só as novas
 python -m observatorio.montar
 cd ..
 

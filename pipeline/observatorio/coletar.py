@@ -1,6 +1,6 @@
 """Coleta o que a Tomoyo não lê: as normas aprovadas pela Câmara do Rio.
 
-    python -m observatorio.coletar               # visões + ficha de cada lei desde 2021
+    python -m observatorio.coletar               # visões + ficha de cada lei desde 2017
     python -m observatorio.coletar --sem-fichas  # só as visões (rápido, ~20 pedidos)
 
 Saída: data/camara/normas.json. As fichas ficam no cache (data/raw), então só leis novas vão à rede.
@@ -24,8 +24,8 @@ def main() -> None:
     args = ap.parse_args()
 
     normas = leis_cmrj.coletar_normas(atualizar=not args.offline)
-    recentes = [n for n in normas if n["ano"] >= config.ANO_INICIAL and n["tipo"] in ("LEI", "LC")]
-    print(f"{len(normas)} normas; {len(recentes)} leis desde {config.ANO_INICIAL}", flush=True)
+    recentes = [n for n in normas if n["ano"] >= config.ANO_INICIAL_LEIS and n["tipo"] in ("LEI", "LC")]
+    print(f"{len(normas)} normas; {len(recentes)} leis desde {config.ANO_INICIAL_LEIS}", flush=True)
 
     anteriores: dict[str, dict] = {}
     if SAIDA.exists():

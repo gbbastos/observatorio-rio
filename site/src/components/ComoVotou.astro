@@ -1,0 +1,212 @@
+---
+// "Como votou": todas as votações nominais do parlamentar, filtráveis por voto, por tema da matéria e
+// pelo mandato escolhido na ficha. A página traz só a posição de cada votação no índice da casa
+// (/<casa>/votos.json) e o voto; o texto das matérias vem do índice, baixado uma vez pelo navegador.
+// As primeiras linhas já vêm prontas, para quem não tem JavaScript.
+import { ORDEM_TEMAS, ROTULO_TEMA } from '../lib/categorias';
+import { votacoes, type Casa, type Voto } from '../lib/dados';
+import { u, num, dataCurta, ementa, rotuloNorma, ROTULO_VOTO } from '../lib/formatar';
+
+interface Props { casa: Casa; votos: Voto[]; limite?: number; semDados?: { legs: number[]; msg: string } }
+const { casa, votos, limite = 20, semDados } = Astro.props;
+
+const lista = votacoes(casa);
+const posicao = new Map(lista.map((v, i) => [v.id, i]));
+const CODIGO: Record<string, string> = { sim: 's', nao: 'n', abstencao: 'a', ausente: 'x', presidindo: 'p' };
+const dados = votos.filter((v) => posicao.has(v.id))
+  .map((v) => [posicao.get(v.id)!, CODIGO[v.voto] ?? v.voto, v.contra_partido ? 1 : 0]);
+
+const contagem: Record<string, number> = {};
+const porTema: Record<string, number> = {};
+for (const v of votos) {
+  contagem[v.voto] = (contagem[v.voto] ?? 0) + 1;
+  const vt = lista[posicao.get(v.id) ?? -1];
+  const simb = vt?.proposicao.categoria && vt.proposicao.categoria !== 'normativa';
+  if (vt?.proposicao.tema && !simb) porTema[vt.proposicao.tema] = (porTema[vt.proposicao.tema] ?? 0) + 1;
+}
+const temas = ORDEM_TEMAS.filter((t) => porTema[t])
+  .sort((a, b) => Number(a === 'outros') - Number(b === 'outros') || porTema[b] - porTema[a]);
+const OBJETO: Record<string, string> = {
+  projeto: 'Projeto', veto: 'Veto', emenda: 'Emenda', redacao_final: 'Redação final', substitutivo: 'Substitutivo',
+};
+const primeiras = votos.slice(0, limite).map((v) => ({ v, vt: lista[posicao.get(v.id) ?? -1] }));
+const resumo = (['sim', 'nao', 'abstencao', 'ausente'] as const).map((k) => `${ROTULO_VOTO[k]} ${num(contagem[k] ?? 0)}`).join(' · ');
+---
+<section class="secao como-votou" id="votos" data-como-votou data-limite={limite}
+         data-sem-dados={semDados?.legs.join(',')} data-msg-sem-dados={semDados?.msg}
+         data-indice={u(`/${casa}/votos.json`)} data-base={u(`/${casa}/votacoes/`)}>
+  <header>
+    <h2 class="display">Como votou</h2>
+    <span class="rubrica"><span data-total>{num(votos.length)}</span> votações nominais</span>
+  </header>
+  {votos.length === 0 ? <p class="rubrica">Nenhuma votação nominal registrada.</p> : (
+    <>
+      <p class="nota-votos">
+        Só as votações nominais, em que cada voto fica registrado; a maioria das votações da casa é
+        simbólica e não diz quem votou o quê. Em veto, “sim” costuma ser manter o veto: confira o
+        resultado na página de cada votação.
+      </p>
+      <p class="resumo-votos rubrica" data-resumo>{resumo}</p>
+      <div class="filtros" role="group" aria-label="Filtrar por voto">
+        <button class="botao" type="button" data-voto-filtro="" aria-pressed="true">Todos</button>
+        <button class="botao" type="button" data-voto-filtro="s" aria-pressed="false">Sim</button>
+        <button class="botao" type="button" data-voto-filtro="n" aria-pressed="false">Não</button>
+        <button class="botao" type="button" data-voto-filtro="a" aria-pressed="false">Abstenção</button>
+        <button class="botao" type="button" data-voto-filtro="x" aria-pressed="false">Ausente</button>
+        <button class="botao" type="button" data-voto-filtro="cp" aria-pressed="false">Contra o partido</button>
+      </div>
+      {temas.length > 0 && (
+        <div class="temas" role="group" aria-label="Tema da matéria">
+          <span class="rubrica">Tema da matéria</span>
+          <div class="chips">
+            {temas.map((t) => (
+              <button type="button" class="tema" data-voto-tema={t} aria-pressed="false">
+                {ROTULO_TEMA[t]} <b data-n>{porTema[t]}</b>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+      <ol class="votos-lista" data-votos-lista>
+        {primeiras.map(({ v, vt }) => (
+          <li>
+            <span class="rubrica">{dataCurta(vt?.data)} · {vt?.proposicao.id ? rotuloNorma(vt.proposicao.id) : 'votação'}{vt?.objeto && ` · ${OBJETO[vt.objeto] ?? vt.objeto}`}</span>
+            <a class="ementa-curta" href={u(`/${casa}/votacoes/${v.id}/`)}>{ementa(vt?.proposicao.ementa)}</a>
+            <span class="votos-linha">
+              <span class:list={['voto', `voto-${v.voto}`]}>{ROTULO_VOTO[v.voto] ?? v.voto}</span>
+              {v.contra_partido && <span class="contra rubrica">contra o partido</span>}
+            </span>
+          </li>
+        ))}
+      </ol>
+      <p class="vazio rubrica" data-votos-vazio hidden>Nenhuma votação neste filtro.</p>
+      <button class="botao mais" type="button" data-votos-mais hidden={votos.length <= limite}>Mostrar mais</button>
+      <script type="application/json" data-votos-dados set:html={JSON.stringify(dados)} />
+    </>
+  )}
+</section>
+
+<style is:global>
+  /* global: as linhas montadas no navegador não têm o atributo de escopo do Astro */
+  .como-votou .nota-votos { margin: -6px 0 10px; font-size: 15px; color: var(--tinta-3); max-width: 80ch; }
+  .como-votou .resumo-votos { margin: 0 0 4px; }
+  .como-votou .filtros { display: flex; flex-wrap: wrap; gap: 6px; margin: 14px 0 10px; }
+  .como-votou .temas { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin: 0 0 10px; }
+  .como-votou .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .como-votou .tema { white-space: nowrap; font-family: var(--f-mono); font-size: 13px; color: var(--tinta);
+    background: var(--papel-2); border: 1px solid var(--linha); padding: 5px 9px; cursor: pointer; }
+  .como-votou .tema b { color: var(--tinta-3); font-weight: 400; margin-left: 2px; }
+  .como-votou .tema:hover { border-color: var(--tinta); }
+  .como-votou .tema[aria-pressed='true'] { background: var(--tinta); color: var(--papel); border-color: var(--tinta); }
+  .como-votou .tema[aria-pressed='true'] b { color: inherit; }
+  .como-votou .tema[hidden] { display: none; }
+  .como-votou .votos-lista { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: 1fr 1fr; column-gap: 48px; }
+  .como-votou .votos-lista li { display: grid; gap: 4px; padding: 12px 0; border-bottom: 1px solid var(--linha); justify-items: start; align-content: start; }
+  .como-votou .ementa-curta { font-size: 17px; line-height: 1.35; text-decoration: none; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+  .como-votou .votos-linha { display: flex; gap: 10px; align-items: center; }
+  .como-votou .voto { font-family: var(--f-mono); font-size: 13px; text-transform: uppercase; font-weight: 700; padding: 2px 8px; border: 1.5px solid currentColor; }
+  .como-votou .voto-sim { color: var(--verde); }
+  .como-votou .voto-nao { color: var(--carimbo); }
+  .como-votou .voto-abstencao { color: var(--ambar); }
+  .como-votou .voto-ausente, .como-votou .voto-presidindo { color: var(--tinta-3); border-style: dashed; }
+  .como-votou .contra { color: var(--carimbo); font-size: 11px; }
+  .como-votou .mais { margin-top: 18px; }
+  @media (max-width: 860px) { .como-votou .votos-lista { grid-template-columns: 1fr; } }
+  @media (max-width: 600px) {
+    .como-votou .filtros .botao { padding: 7px 9px; font-size: 12px; }
+    .como-votou .temas { display: block; }
+    .como-votou .temas .rubrica { display: block; margin-bottom: 6px; }
+    .como-votou .chips { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 8px; scrollbar-width: thin; }
+  }
+</style>
+
+<script>
+  import { dataCurta, rotuloNorma, ROTULO_VOTO } from '../lib/formatar';
+  import { ROTULO_TEMA } from '../lib/categorias';
+
+  type Linha = [string, string, string | null, string, string | null, string | null, string | null, number | null];
+  const sec = document.querySelector<HTMLElement>('[data-como-votou]');
+  const dadosEl = sec?.querySelector('[data-votos-dados]');
+  if (sec && dadosEl) {
+    const meus = JSON.parse(dadosEl.textContent!) as [number, string, number][];
+    const ficha = document.querySelector<HTMLElement>('[data-ficha]');
+    const listaEl = sec.querySelector<HTMLElement>('[data-votos-lista]')!;
+    const maisEl = sec.querySelector<HTMLElement>('[data-votos-mais]')!;
+    const LIMITE = Number(sec.dataset.limite);
+    const VOTO: Record<string, string> = { s: 'sim', n: 'nao', a: 'abstencao', x: 'ausente', p: 'presidindo' };
+    const OBJETO: Record<string, string> = {
+      projeto: 'Projeto', veto: 'Veto', emenda: 'Emenda', redacao_final: 'Redação final', substitutivo: 'Substitutivo',
+    };
+    const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
+    const nf = (n: number) => n.toLocaleString('pt-BR');
+    let indice: Linha[] | null = null;
+    const estado = { voto: '', tema: '', limite: LIMITE };
+
+    const mandato = () => ficha?.dataset.mandato ?? 'todos';
+    const simbolica = (l: Linha) => !!l[5] && l[5] !== 'normativa';
+
+    function render() {
+      if (!indice) return;
+      const m = mandato();
+      const doPeriodo = meus.filter(([i]) => m === 'todos' || String(indice![i][7]) === m);
+      // contagens do período: números dos temas e resumo dos votos (do tema escolhido, se houver)
+      const c: Record<string, number> = {};
+      const porTema: Record<string, number> = {};
+      for (const [i, v] of doPeriodo) {
+        const l = indice[i];
+        if (l[6] && !simbolica(l)) porTema[l[6]] = (porTema[l[6]] ?? 0) + 1;
+        if (!estado.tema || (l[6] === estado.tema && !simbolica(l))) c[v] = (c[v] ?? 0) + 1;
+      }
+      sec!.querySelector('[data-total]')!.textContent = nf(doPeriodo.length);
+      sec!.querySelector('[data-resumo]')!.textContent = (estado.tema ? `Em ${ROTULO_TEMA[estado.tema].toLowerCase()}: ` : '')
+        + (['s', 'n', 'a', 'x']).map((k) => `${ROTULO_VOTO[VOTO[k]]} ${nf(c[k] ?? 0)}`).join(' · ');
+      sec!.querySelectorAll<HTMLButtonElement>('[data-voto-tema]').forEach((b) => {
+        const n = porTema[b.dataset.votoTema!] ?? 0;
+        b.hidden = n === 0;
+        b.querySelector('[data-n]')!.textContent = nf(n);
+        b.setAttribute('aria-pressed', String(b.dataset.votoTema === estado.tema));
+      });
+      sec!.querySelectorAll<HTMLButtonElement>('[data-voto-filtro]').forEach((b) =>
+        b.setAttribute('aria-pressed', String(b.dataset.votoFiltro === estado.voto)));
+
+      const passam = doPeriodo.filter(([i, v, cp]) => {
+        const l = indice![i];
+        if (estado.tema && (l[6] !== estado.tema || simbolica(l))) return false;
+        if (estado.voto === 'cp') return cp === 1;
+        return !estado.voto || v === estado.voto;
+      });
+      const base = sec!.dataset.base!;
+      listaEl.innerHTML = passam.slice(0, estado.limite).map(([i, v, cp]) => {
+        const [id, data, prop, ementa, objeto] = indice![i];
+        const voto = VOTO[v] ?? v;
+        return `<li><span class="rubrica">${esc(dataCurta(data))} · ${esc(prop ? rotuloNorma(prop) : 'votação')}${objeto ? ` · ${esc(OBJETO[objeto] ?? objeto)}` : ''}</span>`
+          + `<a class="ementa-curta" href="${base}${esc(id)}/">${esc(ementa)}</a>`
+          + `<span class="votos-linha"><span class="voto voto-${voto}">${esc(ROTULO_VOTO[voto] ?? voto)}</span>`
+          + `${cp ? '<span class="contra rubrica">contra o partido</span>' : ''}</span></li>`;
+      }).join('');
+      maisEl.hidden = passam.length <= estado.limite;
+      const vazio = sec!.querySelector<HTMLElement>('[data-votos-vazio]')!;
+      vazio.hidden = passam.length > 0;
+      vazio.textContent = (sec!.dataset.semDados ?? '').split(',').includes(m)
+        ? sec!.dataset.msgSemDados! : 'Nenhuma votação neste filtro.';
+    }
+
+    let carregando: Promise<void> | null = null;
+    const carregar = () => (carregando ??= fetch(sec.dataset.indice!).then((r) => r.json()).then((j) => { indice = j; render(); }));
+
+    sec.addEventListener('click', (ev) => {
+      const alvo = (ev.target as HTMLElement).closest<HTMLElement>('[data-voto-filtro], [data-voto-tema], [data-votos-mais]');
+      if (!alvo) return;
+      if (alvo.dataset.votoFiltro !== undefined) { estado.voto = alvo.dataset.votoFiltro; estado.limite = LIMITE; }
+      else if (alvo.dataset.votoTema) { estado.tema = estado.tema === alvo.dataset.votoTema ? '' : alvo.dataset.votoTema; estado.limite = LIMITE; }
+      else estado.limite += 60;
+      carregar().then(render);
+    });
+    document.addEventListener('mandato', () => { estado.limite = LIMITE; carregar().then(render); });
+    if (mandato() !== 'todos') carregar();
+    // baixa o índice quando a seção chega perto da tela
+    new IntersectionObserver((es, obs) => {
+      if (es.some((e) => e.isIntersecting)) { obs.disconnect(); carregar(); }
+    }, { rootMargin: '600px' }).observe(sec);
+  }
+</script>

@@ -22,6 +22,7 @@ const temLeis = m.tem_leis;
 const base = temLeis ? m.leis : m.projetos;
 const basePorAno = temLeis ? m.leis_por_ano : m.projetos_por_ano;
 const oQue = temLeis ? 'leis aprovadas' : 'projetos de lei apresentados';
+const desde = temLeis ? m.ano_inicial_leis : m.ano_inicial;
 const unidade = temLeis ? 'leis' : 'projetos';
 const totalDe = (p: Parlamentar) => (temLeis ? p.leis.total : p.proposicoes.pl);
 const simbDe = (p: Parlamentar) => (temLeis ? p.leis.simbolicas : p.proposicoes.pl_simbolicos);
@@ -78,8 +79,8 @@ const assentos: AssentoDado[] = ordem.map((p) => {
     valores: {
       partido: { cor: corPartido(p.partido), texto: `Bancada do ${p.partido}` },
       producao: total
-        ? { cor: corSimbolica(simb / total), texto: `${num(total)} ${oQue} desde ${m.ano_inicial}; ${num(simb)} simbólicos (${pct(simb, total)}%)` }
-        : { cor: '', texto: `Nenhum registro de ${oQue} desde ${m.ano_inicial}`, vazio: true },
+        ? { cor: corSimbolica(simb / total), texto: `${num(total)} ${oQue} desde ${desde}; ${num(simb)} simbólicos (${pct(simb, total)}%)` }
+        : { cor: '', texto: `Nenhum registro de ${oQue} desde ${desde}`, vazio: true },
       presenca: part != null
         ? { cor: corPresenca(part), texto: `Votou em ${Math.round(part * 100)}% das votações nominais do mandato` }
         : { cor: '', texto: 'Sem votações nominais registradas', vazio: true },
@@ -98,9 +99,9 @@ const opcoesVotacao = ultimas.map((v) => ({
 const top = (f: (p: Parlamentar) => number, n = 6) =>
   [...atuais].filter((p) => f(p) > 0).sort((a, b) => f(b) - f(a) || a.nome.localeCompare(b.nome)).slice(0, n);
 const rankings = [
-  { titulo: 'Fábrica de homenagem', sub: `${temLeis ? 'leis simbólicas aprovadas' : 'projetos simbólicos apresentados'} desde ${m.ano_inicial}`,
+  { titulo: 'Mais homenagens', sub: `${temLeis ? 'leis simbólicas aprovadas' : 'projetos simbólicos apresentados'} desde ${desde}`,
     lista: top(simbDe), valor: (p: Parlamentar) => num(simbDe(p)), extra: (p: Parlamentar) => `de ${num(totalDe(p))} ${unidade}` },
-  { titulo: 'Quem mais fiscaliza', sub: 'requerimentos de informação ao Executivo', lista: top((p) => p.proposicoes.reqinf),
+  { titulo: 'Mais pedidos de informação', sub: 'requerimentos ao Executivo; a quantidade não diz a qualidade', lista: top((p) => p.proposicoes.reqinf),
     valor: (p: Parlamentar) => num(p.proposicoes.reqinf), extra: () => 'pedidos' },
   { titulo: temLeis ? 'Título de cidadão' : 'Medalha e título', sub: temLeis ? 'títulos e medalhas concedidos por decreto' : 'títulos, medalhas e diplomas propostos',
     lista: top(honrariasDe), valor: (p: Parlamentar) => num(honrariasDe(p)), extra: () => 'honrarias' },
@@ -143,9 +144,9 @@ const anos = Object.entries(basePorAno).sort((a, b) => Number(a[0]) - Number(b[0
 const pctGeral = pct(base.simbolicas, base.total);
 ---
 <section class="manchete envelope surge">
-  <div class="manchete-numero numero-gigante vermelho">{pctGeral}<span>%</span></div>
+  <div class="manchete-numero numero-gigante ocre">{pctGeral}<span>%</span></div>
   <div class="manchete-texto">
-    <p class="rubrica">{m.nome} · {oQue} desde {m.ano_inicial}</p>
+    <p class="rubrica">{m.nome} · {oQue} desde {desde}</p>
     <h1 class="display">
       d{temLeis ? 'as' : 'os'} {num(base.total)} {oQue} são {fraseCategorias}
     </h1>
@@ -179,7 +180,7 @@ const pctGeral = pct(base.simbolicas, base.total);
     <div class="quinzena">
       <div class="placar-quinzena">
         <div><span class="numero-gigante">{num(projetosRecentes.length)}</span><span class="rubrica">projetos de lei</span></div>
-        <div><span class="numero-gigante vermelho">{num(projetosRecentes.filter((x) => x.simbolica).length)}</span><span class="rubrica">deles simbólicos</span></div>
+        <div><span class="numero-gigante ocre">{num(projetosRecentes.filter((x) => x.simbolica).length)}</span><span class="rubrica">deles simbólicos</span></div>
         <div><span class="numero-gigante">{num(contaTipo('REQINF'))}</span><span class="rubrica">pedidos de informação</span></div>
         {contaTipo('MOC', 'IND', 'PDL', 'PR') > 0 && (
           <div><span class="numero-gigante">{num(contaTipo('MOC', 'IND', 'PDL', 'PR'))}</span><span class="rubrica">moções, indicações e honrarias</span></div>
@@ -238,7 +239,7 @@ const pctGeral = pct(base.simbolicas, base.total);
       <div class="ano">
         <span class="display ano-rotulo">{ano}</span>
         <BarraCategorias porCategoria={r.por_categoria} legenda={false} />
-        <span class="rubrica">{num(r.total)} {unidade} · <span class="vermelho">{pct(r.simbolicas, r.total)}% simbólic{temLeis ? 'as' : 'os'}</span></span>
+        <span class="rubrica">{num(r.total)} {unidade} · <span class="ocre">{pct(r.simbolicas, r.total)}% simbólic{temLeis ? 'as' : 'os'}</span></span>
       </div>
     ))}
   </div>

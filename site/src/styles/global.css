@@ -14,6 +14,14 @@
   --ambar: #d39508;
   --azul: #1d4e89;
   --sombra: rgba(24, 22, 19, 0.14);
+  /* categorias: azul para regras e políticas, tons de ocre para as simbólicas (sem cor de "ruim") */
+  --cat-regras: #2f5d8a;
+  --cat-calendario: #a8741c;
+  --cat-patrimonio: #c99a45;
+  --cat-logradouro: #7a5a1f;
+  --cat-utilidade: #dcb977;
+  --cat-honraria: #ead3a2;
+  --ocre: #8e6118;
 
   --f-display: 'Big Shoulders Display', 'Arial Narrow', sans-serif;
   --f-texto: 'Newsreader', Georgia, serif;
@@ -40,6 +48,13 @@
     --ambar: #f0b429;
     --azul: #6aa3e8;
     --sombra: rgba(0, 0, 0, 0.5);
+    --cat-regras: #6f9fd6;
+    --cat-calendario: #d09a3e;
+    --cat-patrimonio: #e6b862;
+    --cat-logradouro: #a57d33;
+    --cat-utilidade: #b89a63;
+    --cat-honraria: #8a7650;
+    --ocre: #e2ad4f;
     color-scheme: dark;
   }
 }
@@ -110,6 +125,8 @@ img { max-width: 100%; display: block; }
 .numero-gigante { font-family: var(--f-display); font-weight: 900; line-height: 0.8; font-variant-numeric: tabular-nums; }
 
 .vermelho { color: var(--carimbo); }
+.ocre { color: var(--ocre); }
+.azul-regras { color: var(--cat-regras); }
 
 .botao {
   display: inline-flex; align-items: center; gap: 8px;

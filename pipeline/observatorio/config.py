@@ -36,4 +36,7 @@ VISOES_TEMAS = {
     "utilidade_publica": "111e7b2098e20dc0032579640060e98a",
 }
 
-ANO_INICIAL = 2021   # início da 11ª legislatura, o mesmo recorte da Tomoyo
+ANO_INICIAL = 2021        # início da 11ª legislatura, o mesmo recorte da Tomoyo (projetos, votos, presença)
+ANO_INICIAL_LEIS = 2017   # as leis da Câmara vão uma legislatura mais atrás (10ª, 2017–2020)
+# a Tomoyo só lista a 11ª e a 12ª legislaturas; a 10ª entra aqui para as leis
+LEGISLATURAS_EXTRAS_CAMARA = [{"numero": 10, "inicio": "2017-01-01", "fim": "2020-12-31"}]
