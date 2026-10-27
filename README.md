@@ -69,22 +69,32 @@ exata de cada lei e sem o texto para os resumos).
 
 ### Resumos por IA (opcional)
 
-`python -m observatorio.resumir` resume em linguagem simples as leis que não são simbólicas
+`python -m observatorio.resumir` (ou `atualizar.ps1`, quando `ANTHROPIC_API_KEY` existe) resume em linguagem simples as leis que não são simbólicas
 (~1.100 desde 2021), uma vez cada, e guarda em `data/cache/resumos.json` (versionado, para não pagar
 de novo). Usa a Message Batches API da Anthropic (metade do preço) e precisa de `pip install -r
 pipeline/requirements-ia.txt` e de `ANTHROPIC_API_KEY`. O modelo padrão é `claude-opus-5-5`;
 `RESUMO_MODELO=claude-haiku-5-5` é bem mais barato. Rode `--estimar` para ver quantas faltam e
 `--limite 20` para testar antes.
 
-## Publicar
+## Atualizar e publicar
 
-`.github/workflows/atualizar.yml` roda a cada dois dias: coleta, monta, constrói e publica no
-GitHub Pages. Para ligar:
+Site no ar: https://gbbastos.github.io/observatorio-rio/
 
-1. criar o repositório no GitHub e dar push (com os submódulos);
-2. em *Settings → Pages*, escolher **GitHub Actions** como origem;
-3. (opcional) em *Settings → Secrets*, criar `ANTHROPIC_API_KEY` para os resumos;
-4. rodar o workflow uma vez em *Actions → Atualizar dados e publicar → Run workflow*.
+Os servidores da Câmara do Rio não respondem às máquinas do GitHub, então a coleta roda aqui e o
+GitHub só constrói e publica. Um comando faz tudo (coleta, monta, commita os dados e dá push):
+
+```powershell
+.\atualizar.ps1                 # Câmara e ALERJ
+.\atualizar.ps1 -PularALERJ     # só a Câmara (a primeira coleta da ALERJ leva horas)
+.\atualizar.ps1 -SemPublicar    # atualiza os dados locais sem dar push
+```
+
+Cada push na `main` dispara `.github/workflows/publicar.yml`, que constrói o site a partir de
+`site/src/data/` (versionado) e publica no GitHub Pages. O push usa a conta do GitHub CLI guardada
+no cofre do Windows, ignorando o `GITHUB_TOKEN` do ambiente.
+
+Para rodar sozinho a cada dois dias, dá para agendar `atualizar.ps1 -PularALERJ` no Agendador de
+Tarefas do Windows (o computador precisa estar ligado no horário).
 
 ## Limites conhecidos
 

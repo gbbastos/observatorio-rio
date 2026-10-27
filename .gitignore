@@ -5,9 +5,9 @@ data/cache/resumos-lote.json
 etl-*.log
 build.log
 
-# gerados pelo pipeline para o site
-site/src/data/
-site/public/fotos/
+# site/src/data/ e site/public/fotos/ são gerados pelo pipeline, mas ficam versionados: os sites da
+# Câmara e da ALERJ não respondem aos servidores do GitHub, então a coleta roda na máquina local
+# (atualizar.ps1) e o GitHub só constrói e publica.
 
 # site
 site/node_modules/
