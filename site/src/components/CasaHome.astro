@@ -3,7 +3,7 @@
 import Plenario, { type AssentoDado, type Modo } from './Plenario.astro';
 import BarraCategorias from './BarraCategorias.astro';
 import Carimbo from './Carimbo.astro';
-import { meta, bancada, leis, votacoes, votacao, type Casa, type Parlamentar } from '../lib/dados';
+import { meta, bancada, leis, votacoes, votacao, parlamentar, type Casa, type Parlamentar } from '../lib/dados';
 import { corPartido } from '../lib/partidos';
 import { corSimbolica, corPresenca } from '../lib/categorias';
 import { ordenarPorBancada } from '../lib/plenario';
@@ -116,6 +116,29 @@ const coletivas = leis(casa)
   .sort((a, b) => b.n_autores - a.n_autores)
   .slice(0, 5);
 
+// --- últimos 14 dias de protocolos ---------------------------------------------------------
+const DIAS_RECENTES = 14;
+const recentesPorId = new Map<string, { id: string; tipo: string; data: string; ementa: string; categoria: string | null;
+  simbolica: boolean | null; autores: Parlamentar[] }>();
+for (const p of atuais) {
+  for (const x of parlamentar(casa, p.slug).lista_proposicoes) {
+    if (!x.data) continue;
+    const r = recentesPorId.get(x.id) ?? { ...x, data: x.data, autores: [] };
+    r.autores.push(p);
+    recentesPorId.set(x.id, r);
+  }
+}
+const ultimaData = [...recentesPorId.values()].reduce((a, x) => (x.data > a ? x.data : a), '');
+const corte = ultimaData
+  ? new Date(Date.parse(ultimaData) - DIAS_RECENTES * 86_400_000).toISOString().slice(0, 10) : '';
+const recentes = [...recentesPorId.values()].filter((x) => x.data > corte)
+  .sort((a, b) => b.data.localeCompare(a.data) || a.id.localeCompare(b.id));
+const contaTipo = (...tipos: string[]) => recentes.filter((x) => tipos.includes(x.tipo)).length;
+const projetosRecentes = recentes.filter((x) => x.tipo === 'PL' || x.tipo === 'PLC');
+const maisAtivos = [...atuais]
+  .map((p) => ({ p, n: recentes.filter((x) => x.autores.includes(p)).length }))
+  .filter((x) => x.n > 0).sort((a, b) => b.n - a.n).slice(0, 5);
+
 const anos = Object.entries(basePorAno).sort((a, b) => Number(a[0]) - Number(b[0]));
 const pctGeral = pct(base.simbolicas, base.total);
 ---
@@ -146,6 +169,37 @@ const pctGeral = pct(base.simbolicas, base.total);
   <Plenario assentos={assentos} modos={modos} votacoes={opcoesVotacao}
             rotuloAria={`Plenário da ${m.nome} com ${atuais.length} cadeiras`} />
 </section>
+
+{recentes.length > 0 && (
+  <section class="secao envelope">
+    <header>
+      <h2 class="display">Na quinzena</h2>
+      <span class="rubrica">protocolado de {dataCurta(corte)} a {dataCurta(ultimaData)}</span>
+    </header>
+    <div class="quinzena">
+      <div class="placar-quinzena">
+        <div><span class="numero-gigante">{num(projetosRecentes.length)}</span><span class="rubrica">projetos de lei</span></div>
+        <div><span class="numero-gigante vermelho">{num(projetosRecentes.filter((x) => x.simbolica).length)}</span><span class="rubrica">deles simbólicos</span></div>
+        <div><span class="numero-gigante">{num(contaTipo('REQINF'))}</span><span class="rubrica">pedidos de informação</span></div>
+        <div><span class="numero-gigante">{num(contaTipo('MOC', 'IND', 'PDL', 'PR'))}</span><span class="rubrica">moções, indicações e honrarias</span></div>
+        {maisAtivos.length > 0 && (
+          <p class="ativos rubrica">Mais ativos:{' '}
+            {maisAtivos.map((x, i) => (<><a href={ficha(x.p)}>{x.p.nome}</a> ({x.n}){i < maisAtivos.length - 1 ? ', ' : ''}</>))}
+          </p>
+        )}
+      </div>
+      <ul class="lista-recentes">
+        {projetosRecentes.slice(0, 8).map((x) => (
+          <li>
+            <span class="rubrica">{dataCurta(x.data)} · {x.id.replace('-', ' ')} · {x.autores.map((a) => a.nome).join(', ')}</span>
+            <span class="ementa-recente">{ementa(x.ementa)}</span>
+            {x.simbolica && <Carimbo categoria={x.categoria} pequeno />}
+          </li>
+        ))}
+      </ul>
+    </div>
+  </section>
+)}
 
 <section class="secao envelope">
   <header>
@@ -265,7 +319,17 @@ const pctGeral = pct(base.simbolicas, base.total);
   .placar .ok { color: var(--verde); }
   .placar .nao { color: var(--carimbo); }
   .mais { margin-top: 28px; }
+  .quinzena { display: grid; grid-template-columns: minmax(240px, 1fr) 2fr; gap: 36px; align-items: start; }
+  .placar-quinzena { display: grid; grid-template-columns: 1fr 1fr; gap: 18px 20px; }
+  .placar-quinzena > div { display: grid; gap: 4px; border-top: 1.5px solid var(--tinta); padding-top: 8px; }
+  .placar-quinzena .numero-gigante { font-size: 64px; }
+  .placar-quinzena .rubrica { font-size: 11px; }
+  .ativos { grid-column: 1 / -1; margin: 0; line-height: 1.6; }
+  .lista-recentes { list-style: none; margin: 0; padding: 0; }
+  .lista-recentes li { display: grid; gap: 4px; justify-items: start; padding: 10px 0; border-bottom: 1px solid var(--linha); }
+  .ementa-recente { font-size: 17px; line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
   @media (max-width: 720px) {
+    .quinzena { grid-template-columns: 1fr; }
     .manchete { grid-template-columns: 1fr; }
     .manchete-numero { margin-bottom: -10px; }
     .ano { grid-template-columns: 56px 1fr; }
