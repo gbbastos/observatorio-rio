@@ -1,8 +1,10 @@
 ---
 // O plenário em semicírculo: uma bolinha por cadeira, a cor muda conforme o modo escolhido.
 // O SVG sai pronto do build (funciona sem JS); o script só troca de modo e mostra o cartão da cadeira.
+// Com `comoVotou`, ganha o modo "Como votou": primeiro o tema (cada cadeira pela parte dos projetos do
+// tema em que votou a favor), depois, se a pessoa quiser, um projeto específico.
 import { layoutPlenario, LARGURA, ALTURA } from '../lib/plenario';
-import { u } from '../lib/formatar';
+import { u, num } from '../lib/formatar';
 
 export interface ValorModo { cor: string; texto: string; vazio?: boolean }
 export interface AssentoDado {
@@ -11,44 +13,57 @@ export interface AssentoDado {
 }
 export interface ItemLegenda { cor: string; texto: string; vazio?: boolean }
 export interface Modo { id: string; rotulo: string; legenda: ItemLegenda[]; centro: { grande: string; pequeno: string } }
-export interface VotacaoOpcao { id: string; rotulo: string; href: string; votos: Record<string, string> }
+export interface ComoVotouPlenario {
+  /** /<casa>/posicoes.json */
+  url: string;
+  /** prefixo das páginas de projeto (/<casa>/proposicoes/) */
+  base: string;
+  temas: { id: string; rotulo: string; n: number }[];
+  total: number;
+  nota: string;
+}
 
 interface Props {
   assentos: AssentoDado[];
   modos: Modo[];
   modoInicial?: string;
-  votacoes?: VotacaoOpcao[];
+  comoVotou?: ComoVotouPlenario;
   rotuloAria: string;
 }
-const { assentos, modos, modoInicial = modos[0]?.id, votacoes = [], rotuloAria } = Astro.props;
+const { assentos, modos, modoInicial = modos[0]?.id, comoVotou: cv, rotuloAria } = Astro.props;
 const pos = layoutPlenario(assentos.length);
 const modo0 = modos.find((m) => m.id === modoInicial) ?? modos[0];
 const dados = {
   modos: Object.fromEntries(modos.map((m) => [m.id, m])),
   valores: Object.fromEntries(assentos.map((a) => [a.id, a.valores])),
   info: Object.fromEntries(assentos.map((a) => [a.id, { nome: a.nome, partido: a.partido, foto: a.foto ? u(`/${a.foto}`) : null, href: a.href }])),
-  votacoes,
+  temas: Object.fromEntries((cv?.temas ?? []).map((t) => [t.id, t.rotulo])),
 };
-const temVotacao = votacoes.length > 0;
 ---
-<figure class="plenario" data-plenario>
-  {(modos.length > 1 || temVotacao) && (
+<figure class="plenario" data-plenario data-url-posicoes={cv?.url} data-base-projetos={cv?.base}>
+  {(modos.length > 1 || cv) && (
     <div class="controles" role="group" aria-label="Colorir o plenário por">
       {modos.map((m) => (
         <button type="button" class="botao" data-modo={m.id} aria-pressed={m.id === modo0.id ? 'true' : 'false'}>{m.rotulo}</button>
       ))}
-      {temVotacao && (
-        <button type="button" class="botao" data-modo="votacao" aria-pressed="false">Votação</button>
-      )}
+      {cv && <button type="button" class="botao" data-modo="tema" aria-pressed="false">Como votou</button>}
     </div>
   )}
-  {temVotacao && (
-    <div class="escolha-votacao" data-escolha hidden>
-      <label class="rubrica" for="sel-votacao">Escolha uma votação nominal</label>
-      <select id="sel-votacao" data-votacao>
-        {votacoes.map((v) => <option value={v.id}>{v.rotulo}</option>)}
+  {cv && (
+    <div class="painel-tema" data-painel-tema hidden>
+      <p class="rubrica rotulo-passo"><b>1</b> Sobre o quê?</p>
+      <div class="chips" role="group" aria-label="Tema dos projetos">
+        <button type="button" class="chip" data-tema="" aria-pressed="true">Todos os temas <b>{num(cv.total)}</b></button>
+        {cv.temas.map((t) => (
+          <button type="button" class="chip" data-tema={t.id} aria-pressed="false">{t.rotulo} <b>{num(t.n)}</b></button>
+        ))}
+      </div>
+      <label class="rubrica rotulo-passo" for="sel-projeto"><b>2</b> Se quiser, um projeto do tema</label>
+      <select id="sel-projeto" data-projeto>
+        <option value="">Todos os projetos do tema (resumo)</option>
       </select>
-      <a class="rubrica" data-link-votacao href={votacoes[0].href}>ver votação →</a>
+      <a class="rubrica link-projeto" data-link-projeto href={cv.base} hidden>ver o projeto e quem votou a favor e contra →</a>
+      <p class="nota-tema">{cv.nota}</p>
     </div>
   )}
 
@@ -85,12 +100,24 @@ const temVotacao = votacoes.length > 0;
 <style>
   .plenario { margin: 0; }
   .controles { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
-  .escolha-votacao { display: grid; gap: 6px; margin: 0 0 14px; max-width: 760px; }
-  .escolha-votacao[hidden] { display: none; }
-  .escolha-votacao select {
+  .painel-tema { display: grid; gap: 8px; margin: 0 0 16px; padding: 14px 0 0; border-top: 1px solid var(--linha); }
+  .painel-tema[hidden] { display: none; }
+  .rotulo-passo { margin: 0; display: flex; align-items: center; gap: 8px; }
+  .rotulo-passo b { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 50%;
+    background: var(--tinta); color: var(--papel); font-size: 11px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+  .chip { white-space: nowrap; font-family: var(--f-mono); font-size: 13px; color: var(--tinta); background: var(--papel-2);
+    border: 1px solid var(--linha); padding: 6px 10px; cursor: pointer; }
+  .chip b { color: var(--tinta-3); font-weight: 400; margin-left: 2px; }
+  .chip:hover { border-color: var(--tinta); }
+  .chip[aria-pressed='true'] { background: var(--tinta); color: var(--papel); border-color: var(--tinta); }
+  .chip[aria-pressed='true'] b { color: inherit; }
+  .painel-tema select {
     font-family: var(--f-texto); font-size: 16px; padding: 8px 10px; background: var(--papel-2); color: var(--tinta);
-    border: 1.5px solid var(--tinta); border-radius: 0; width: 100%; min-width: 0; text-overflow: ellipsis;
+    border: 1.5px solid var(--tinta); border-radius: 0; width: 100%; max-width: 760px; min-width: 0; text-overflow: ellipsis;
   }
+  .link-projeto[hidden] { display: none; }
+  .nota-tema { margin: 4px 0 0; font-size: 14px; color: var(--tinta-3); max-width: 80ch; }
   .palco { position: relative; }
   svg { width: 100%; height: auto; display: block; overflow: visible; }
   .cadeira {
@@ -117,35 +144,47 @@ const temVotacao = votacoes.length > 0;
   :global(.cartao-valor) { margin: 0; font-size: 16px; line-height: 1.25; }
   :global(.cartao-link) { font-family: var(--f-mono); font-size: 13px; }
   @media (max-width: 720px) { figcaption { grid-template-columns: 1fr; } }
+  @media (max-width: 600px) {
+    .chips { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 8px; scrollbar-width: thin; }
+  }
 </style>
 
 <script>
+  import { dataCurta } from '../lib/formatar';
+
   type Valor = { cor: string; texto: string; vazio?: boolean };
   type Dados = {
     modos: Record<string, { id: string; legenda: { cor: string; texto: string; vazio?: boolean }[]; centro: { grande: string; pequeno: string } }>;
     valores: Record<string, Record<string, Valor>>;
     info: Record<string, { nome: string; partido: string; foto: string | null; href?: string }>;
-    votacoes: { id: string; rotulo: string; href: string; votos: Record<string, string> }[];
+    temas: Record<string, string>;
   };
+  /** [slug, número, ementa, tema, data, posições] (ver /<casa>/posicoes.json) */
+  type Projeto = [string, string, string, string, string, string];
+  type Posicoes = { ids: string[]; projetos: Projeto[] };
 
-  const COR_VOTO: Record<string, Valor> = {
-    sim: { cor: 'var(--verde)', texto: 'Votou sim' },
-    nao: { cor: 'var(--carimbo)', texto: 'Votou não' },
-    abstencao: { cor: 'var(--ambar)', texto: 'Absteve-se' },
-    presidindo: { cor: 'var(--tinta-3)', texto: 'Presidia a sessão' },
-    ausente: { cor: 'transparent', texto: 'Ausente', vazio: true },
+  const POSICAO: Record<string, Valor> = {
+    f: { cor: 'var(--verde)', texto: 'Votou a favor do projeto' },
+    c: { cor: 'var(--carimbo)', texto: 'Votou contra o projeto' },
+    a: { cor: 'var(--ambar)', texto: 'Absteve-se' },
+    p: { cor: 'var(--tinta-3)', texto: 'Presidia a sessão' },
+    x: { cor: '', texto: 'Ausente', vazio: true },
+    '-': { cor: '', texto: 'Ainda não estava na Casa', vazio: true },
   };
-  const LEGENDA_VOTO = [
-    { cor: 'var(--verde)', texto: 'Sim' }, { cor: 'var(--carimbo)', texto: 'Não' },
-    { cor: 'var(--ambar)', texto: 'Abstenção' }, { cor: 'transparent', texto: 'Ausente', vazio: true },
+  // parte dos projetos do tema em que votou a favor (entre os em que votou sim ou não)
+  const FAIXAS: [number, string, string][] = [
+    [0.95, '#1f7a4d', 'a favor em 95% ou mais'], [0.85, '#6aa27a', '85% a 95%'], [0.7, '#c4bc94', '70% a 85%'],
+    [0.5, '#e3957a', '50% a 70%'], [0, '#cf2e1b', 'a favor em menos da metade'],
   ];
+  const corFavor = (fr: number) => FAIXAS.find(([min]) => fr >= min)![1];
+  const nf = (n: number) => n.toLocaleString('pt-BR');
 
   for (const raiz of document.querySelectorAll<HTMLElement>('[data-plenario]')) {
     const dados: Dados = JSON.parse(raiz.querySelector('[data-dados]')!.textContent!);
     const botoes = raiz.querySelectorAll<HTMLButtonElement>('[data-modo]');
-    const escolha = raiz.querySelector<HTMLElement>('[data-escolha]');
-    const select = raiz.querySelector<HTMLSelectElement>('[data-votacao]');
-    const linkVotacao = raiz.querySelector<HTMLAnchorElement>('[data-link-votacao]');
+    const painel = raiz.querySelector<HTMLElement>('[data-painel-tema]');
+    const select = raiz.querySelector<HTMLSelectElement>('[data-projeto]');
+    const linkProjeto = raiz.querySelector<HTMLAnchorElement>('[data-link-projeto]');
     const legenda = raiz.querySelector<HTMLElement>('[data-legenda]')!;
     const cartao = raiz.querySelector<HTMLElement>('[data-cartao]')!;
     const grande = raiz.querySelector<SVGTextElement>('[data-centro-grande]')!;
@@ -154,12 +193,57 @@ const temVotacao = votacoes.length > 0;
     let modo = [...botoes].find((b) => b.getAttribute('aria-pressed') === 'true')?.dataset.modo ?? '';
     let selecionado: string | null = null;
 
-    const valorDe = (id: string): Valor | undefined => {
-      if (modo !== 'votacao') return dados.valores[id]?.[modo];
-      const v = dados.votacoes.find((x) => x.id === select?.value);
-      const voto = v?.votos[id];
-      return voto ? COR_VOTO[voto] ?? COR_VOTO.ausente : { cor: 'transparent', texto: 'Não estava na Casa nesta data', vazio: true };
+    // --- "Como votou": posições baixadas na primeira vez que o modo é escolhido ---
+    let posicoes: Posicoes | null = null;
+    let indice = new Map<string, number>();
+    let tema = '';
+    let projeto: Projeto | null = null;
+    let agregado = new Map<string, Record<string, number>>();
+    let carregando: Promise<void> | null = null;
+    const carregar = () => (carregando ??= fetch(raiz.dataset.urlPosicoes!).then((r) => r.json()).then((j: Posicoes) => {
+      posicoes = j;
+      indice = new Map(j.ids.map((id, i) => [id, i]));
+      mudarTema(tema);
+    }));
+    const doTema = () => posicoes!.projetos.filter((p) => !tema || p[3] === tema);
+    const nomeTema = () => (tema ? dados.temas[tema].toLowerCase() : 'todos os temas');
+
+    function mudarTema(t: string) {
+      tema = t;
+      projeto = null;
+      raiz.querySelectorAll<HTMLButtonElement>('[data-tema]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.tema === t)));
+      if (!posicoes) return;
+      const lista = doTema();
+      agregado = new Map(posicoes.ids.map((id) => [id, { f: 0, c: 0, a: 0, x: 0, p: 0, '-': 0 }]));
+      for (const p of lista) posicoes.ids.forEach((id, i) => { agregado.get(id)![p[5][i]]++; });
+      if (select) {
+        select.innerHTML = '';
+        select.add(new Option(`Todos os ${nf(lista.length)} projetos de ${nomeTema()} (resumo)`, ''));
+        for (const p of lista) {
+          const em = p[2].length > 90 ? `${p[2].slice(0, 88).trimEnd()}…` : p[2];
+          select.add(new Option(`${dataCurta(p[4])} · ${p[1]} · ${em}`, p[0]));
+        }
+      }
+      if (linkProjeto) linkProjeto.hidden = true;
+      pintar();
+    }
+
+    const valorTema = (id: string): Valor => {
+      if (!posicoes) return { cor: 'var(--papel-3)', texto: 'Carregando os votos…' };
+      const i = indice.get(id);
+      if (i == null) return { cor: '', texto: 'Sem votos registrados', vazio: true };
+      if (projeto) return POSICAO[projeto[5][i]] ?? POSICAO['-'];
+      const c = agregado.get(id)!;
+      const votou = c.f + c.c;
+      if (!votou) return { cor: '', texto: `Não votou sim nem não em nenhum projeto de ${nomeTema()}`, vazio: true };
+      const partes = [`a favor em ${nf(c.f)}`, `contra em ${nf(c.c)}`];
+      if (c.a) partes.push(`absteve-se em ${nf(c.a)}`);
+      if (c.x) partes.push(`ausente em ${nf(c.x)}`);
+      const total = c.f + c.c + c.a + c.x + c.p;
+      return { cor: corFavor(c.f / votou), texto: `${tema ? dados.temas[tema] : 'Todos os temas'}: ${partes.join(', ')} (de ${nf(total)} projetos votados enquanto estava na Casa)` };
     };
+
+    const valorDe = (id: string): Valor | undefined => (modo === 'tema' ? valorTema(id) : dados.valores[id]?.[modo]);
 
     const desenharLegenda = (itens: { cor: string; texto: string; vazio?: boolean }[]) => {
       legenda.innerHTML = '';
@@ -182,14 +266,25 @@ const temVotacao = votacoes.length > 0;
         const i = dados.info[a.dataset.id!];
         a.setAttribute('aria-label', `${i.nome}, ${i.partido}: ${v?.texto ?? ''}`);
       }
-      if (modo === 'votacao') {
-        const v = dados.votacoes.find((x) => x.id === select?.value);
-        const cont = { sim: 0, nao: 0 };
-        for (const voto of Object.values(v?.votos ?? {})) if (voto === 'sim' || voto === 'nao') cont[voto]++;
-        grande.textContent = `${cont.sim} × ${cont.nao}`;
-        pequeno.textContent = 'sim × não';
-        desenharLegenda(LEGENDA_VOTO);
-        if (linkVotacao && v) linkVotacao.href = v.href;
+      if (modo === 'tema') {
+        if (!posicoes) {
+          grande.textContent = '…';
+          pequeno.textContent = 'carregando os votos';
+          desenharLegenda([]);
+        } else if (projeto) {
+          const cont: Record<string, number> = {};
+          for (const ch of projeto[5]) cont[ch] = (cont[ch] ?? 0) + 1;
+          grande.textContent = `${cont.f ?? 0} × ${cont.c ?? 0}`;
+          pequeno.textContent = 'a favor × contra';
+          desenharLegenda([
+            { cor: POSICAO.f.cor, texto: `A favor ${cont.f ?? 0}` }, { cor: POSICAO.c.cor, texto: `Contra ${cont.c ?? 0}` },
+            { cor: POSICAO.a.cor, texto: `Abstenção ${cont.a ?? 0}` }, { cor: '', texto: `Ausente ${cont.x ?? 0}`, vazio: true },
+          ]);
+        } else {
+          grande.textContent = nf(doTema().length);
+          pequeno.textContent = tema ? `projetos de ${nomeTema()}` : 'projetos votados';
+          desenharLegenda([...FAIXAS.map(([, cor, texto]) => ({ cor, texto })), { cor: '', texto: 'não votou', vazio: true }]);
+        }
       } else {
         const m = dados.modos[modo];
         grande.textContent = m.centro.grande;
@@ -214,10 +309,20 @@ const temVotacao = votacoes.length > 0;
     botoes.forEach((b) => b.addEventListener('click', () => {
       modo = b.dataset.modo!;
       botoes.forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
-      if (escolha) escolha.hidden = modo !== 'votacao';
+      if (painel) painel.hidden = modo !== 'tema';
+      if (modo === 'tema') carregar();
       pintar();
+      raiz.dispatchEvent(new CustomEvent('plenario:modo', { detail: modo, bubbles: true }));
     }));
-    select?.addEventListener('change', pintar);
+    raiz.querySelectorAll<HTMLButtonElement>('[data-tema]').forEach((b) => b.addEventListener('click', () => mudarTema(b.dataset.tema!)));
+    select?.addEventListener('change', () => {
+      projeto = posicoes?.projetos.find((p) => p[0] === select.value) ?? null;
+      if (linkProjeto) {
+        linkProjeto.hidden = !projeto;
+        if (projeto) linkProjeto.href = `${raiz.dataset.baseProjetos}${projeto[0]}/`;
+      }
+      pintar();
+    });
 
     // no mouse, passar por cima mostra o cartão e o clique abre a ficha; no toque, o primeiro
     // toque numa cadeira mostra o cartão e o segundo abre a ficha

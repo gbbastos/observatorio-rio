@@ -1,11 +1,12 @@
 ---
 // Página inicial de uma casa: manchete, plenário, rankings, leis coletivas e últimas votações.
-import Plenario, { type AssentoDado, type Modo } from './Plenario.astro';
+import Plenario, { type AssentoDado, type Modo, type ComoVotouPlenario } from './Plenario.astro';
 import BarraCategorias from './BarraCategorias.astro';
 import Carimbo from './Carimbo.astro';
-import { meta, bancada, leis, votacoes, votacao, parlamentar, type Casa, type Parlamentar } from '../lib/dados';
+import { meta, bancada, leis, votacoes, parlamentar, type Casa, type Parlamentar } from '../lib/dados';
 import { corPartido } from '../lib/partidos';
-import { corSimbolica, corPresenca } from '../lib/categorias';
+import { corSimbolica, corPresenca, ORDEM_TEMAS, ROTULO_TEMA } from '../lib/categorias';
+import { projetosDoPlenario, comoContamos } from '../lib/proposicoes';
 import { ordenarPorBancada } from '../lib/plenario';
 import { u, num, pct, dataCurta, ementa, rotuloNorma } from '../lib/formatar';
 
@@ -89,11 +90,21 @@ const assentos: AssentoDado[] = ordem.map((p) => {
 });
 
 const ultimas = votacoes(casa).filter((v) => (v.legislatura ?? 0) === m.legislatura_atual.numero).slice(0, 40);
-const opcoesVotacao = ultimas.map((v) => ({
-  id: v.id, href: u(`/${casa}/votacoes/${v.id}/`),
-  rotulo: `${dataCurta(v.data)} · ${v.proposicao.id ? rotuloNorma(v.proposicao.id) : 'votação'} · ${ementa(v.proposicao.ementa).slice(0, 90)}`,
-  votos: votacao(casa, v.id).votos,
-}));
+
+// "Como votou": projetos de regras e políticas votados de forma nominal, por tema (as posições de cada
+// cadeira o navegador baixa de /<casa>/posicoes.json quando a pessoa escolhe o modo)
+const projetosVotados = projetosDoPlenario(casa);
+const nPorTema: Record<string, number> = {};
+for (const { p } of projetosVotados) nPorTema[p.tema!] = (nPorTema[p.tema!] ?? 0) + 1;
+const comoVotou: ComoVotouPlenario | undefined = projetosVotados.length ? {
+  url: u(`/${casa}/posicoes.json`), base: u(`/${casa}/proposicoes/`), total: projetosVotados.length,
+  temas: ORDEM_TEMAS.filter((t) => nPorTema[t])
+    .sort((a, b) => Number(a === 'outros') - Number(b === 'outros') || nPorTema[b] - nPorTema[a])
+    .map((t) => ({ id: t, rotulo: ROTULO_TEMA[t], n: nPorTema[t] })),
+  nota: `Cada projeto de regras e políticas votado de forma nominal desde ${m.ano_inicial} conta uma vez, `
+    + `pelo último voto de cada ${m.membro}. ${comoContamos(casa)}, assim como as homenagens. `
+    + 'A maior parte das votações é simbólica e não entra aqui.',
+} : undefined;
 
 // --- rankings ------------------------------------------------------------------------------
 const top = (f: (p: Parlamentar) => number, n = 6) =>
@@ -167,7 +178,7 @@ const pctGeral = pct(base.simbolicas, base.total);
     <h2 class="display">O plenário</h2>
     <span class="rubrica">{m.curto} · {m.legislatura_atual.numero}ª legislatura ({m.legislatura_atual.inicio.slice(0, 4)}–{m.legislatura_atual.fim.slice(0, 4)})</span>
   </header>
-  <Plenario assentos={assentos} modos={modos} votacoes={opcoesVotacao}
+  <Plenario assentos={assentos} modos={modos} comoVotou={comoVotou}
             rotuloAria={`Plenário da ${m.nome} com ${atuais.length} cadeiras`} />
 </section>
 

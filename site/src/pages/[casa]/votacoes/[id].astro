@@ -7,6 +7,7 @@ import { corPartido } from '../../../lib/partidos';
 import { ordenarPorBancada } from '../../../lib/plenario';
 import { u, dataLonga, ementa, rotuloNorma, ROTULO_VOTO } from '../../../lib/formatar';
 import { ROTULO_TEMA } from '../../../lib/categorias';
+import { sentidoDoSim, explicaVeto, slugProposicao } from '../../../lib/proposicoes';
 
 export function getStaticPaths() {
   return casasDisponiveis().flatMap((casa) => votacoes(casa).map((v) => ({ params: { casa, id: v.id } })));
@@ -55,6 +56,8 @@ const grupos = (['sim', 'nao', 'abstencao', 'ausente'] as const).map((k) => ({
   lista: ordem.filter((x) => x.voto === k),
 }));
 const titulo = v.proposicao.id ? rotuloNorma(v.proposicao.id) : 'Votação nominal';
+const sentido = sentidoDoSim(casa, v);
+const paginaProjeto = v.proposicao.id ? u(`/${casa}/proposicoes/${slugProposicao(v.proposicao.id)}/`) : null;
 ---
 <Base casa={casa} titulo={`${titulo}: ${v.resultado ?? 'votação'} por ${cont.sim} a ${cont.nao}`}
       descricao={ementa(v.proposicao.ementa)}>
@@ -72,6 +75,9 @@ const titulo = v.proposicao.id ? rotuloNorma(v.proposicao.id) : 'Votação nomin
         {v.proposicao.autores.length > 0 && <span class="rubrica">Autoria: {v.proposicao.autores.join(', ')}</span>}
       </p>
       {v.resultado_frase && <p class="frase">“{v.resultado_frase}”</p>}
+      {explicaVeto(casa, sentido) && <p class="explica">{explicaVeto(casa, sentido)}</p>}
+      {v.objeto === 'emenda' && <p class="explica">Esta é a votação de uma emenda: o sim aprova a mudança proposta, não o projeto inteiro.</p>}
+      {paginaProjeto && <p class="projeto"><a class="botao" href={paginaProjeto}>O projeto: todas as votações e quem foi a favor ou contra →</a></p>}
     </header>
 
     <section class="secao">
@@ -104,6 +110,8 @@ const titulo = v.proposicao.id ? rotuloNorma(v.proposicao.id) : 'Votação nomin
   .ementa { font-size: clamp(20px, 2.4vw, 26px); line-height: 1.3; max-width: 60ch; margin: 0 0 14px; }
   .meta { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin: 0; }
   .frase { font-style: italic; color: var(--tinta-2); margin-top: 14px; }
+  .explica { font-size: 16px; color: var(--tinta-2); margin: 14px 0 0; max-width: 75ch; padding-left: 12px; border-left: 3px solid var(--ambar); }
+  .projeto { margin: 18px 0 0; }
   .grupos { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 32px; }
   .grupos h2 { font-size: 32px; margin: 0 0 8px; border-bottom: 2px solid var(--tinta); padding-bottom: 6px; }
   .n { color: var(--tinta-3); }

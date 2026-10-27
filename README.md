@@ -12,10 +12,13 @@ O site mostra, para cada vereador e deputado estadual:
 - tudo separado por mandato, para quem passou por mais de uma legislatura (na Câmara, as leis vão
   até 2017; projetos, votações e presença, até 2021);
 - como votou em cada votação nominal e os pedidos de informação ao Executivo, filtráveis por tema;
+  o voto vira "a favor" ou "contra o projeto" (na Câmara, o sim ao veto é contra o projeto), e cada
+  projeto votado tem uma página com quem foi a favor e quem foi contra;
 - o **peso real** da autoria (uma lei com 20 coautores vale 1/20 para cada um);
 - requerimentos de informação (fiscalização), títulos e medalhas, moções;
 - presença e votos nas votações nominais;
-- o plenário em semicírculo, colorido por partido, por produção simbólica, por presença ou por uma votação.
+- o plenário em semicírculo, colorido por partido, por produção simbólica, por presença ou por como
+  cada um votou num tema (e, dentro dele, num projeto).
 
 Nome provisório: trocar em `site/src/lib/site.ts` e no logo em `site/src/layouts/Base.astro`.
 

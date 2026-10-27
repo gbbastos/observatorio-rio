@@ -2,10 +2,13 @@
 // "Como votou": todas as votações nominais do parlamentar, filtráveis por voto, por tema da matéria e
 // pelo mandato escolhido na ficha. A página traz só a posição de cada votação no índice da casa
 // (/<casa>/votos.json) e o voto; o texto das matérias vem do índice, baixado uma vez pelo navegador.
-// As primeiras linhas já vêm prontas, para quem não tem JavaScript.
+// As primeiras linhas já vêm prontas, para quem não tem JavaScript. O resumo conta projetos, não
+// votações: cada projeto uma vez, pelo último voto a favor ou contra (o voto no veto já traduzido).
 import { ORDEM_TEMAS, ROTULO_TEMA } from '../lib/categorias';
 import { votacoes, type Casa, type Voto } from '../lib/dados';
 import { u, num, dataCurta, ementa, rotuloNorma, ROTULO_VOTO } from '../lib/formatar';
+import { comoContamos, sentidoDoSim, codigoSentido, slugProposicao } from '../lib/proposicoes';
+import { resumirPorProjeto, textoResumo, dicaVeto } from '../lib/resumoVotos';
 
 interface Props { casa: Casa; votos: Voto[]; limite?: number; semDados?: { legs: number[]; msg: string } }
 const { casa, votos, limite = 20, semDados } = Astro.props;
@@ -13,13 +16,12 @@ const { casa, votos, limite = 20, semDados } = Astro.props;
 const lista = votacoes(casa);
 const posicao = new Map(lista.map((v, i) => [v.id, i]));
 const CODIGO: Record<string, string> = { sim: 's', nao: 'n', abstencao: 'a', ausente: 'x', presidindo: 'p' };
+const sentidoDe = (vt: (typeof lista)[number] | undefined) => (vt ? codigoSentido(sentidoDoSim(casa, vt)) : null);
 const dados = votos.filter((v) => posicao.has(v.id))
   .map((v) => [posicao.get(v.id)!, CODIGO[v.voto] ?? v.voto, v.contra_partido ? 1 : 0]);
 
-const contagem: Record<string, number> = {};
 const porTema: Record<string, number> = {};
 for (const v of votos) {
-  contagem[v.voto] = (contagem[v.voto] ?? 0) + 1;
   const vt = lista[posicao.get(v.id) ?? -1];
   const simb = vt?.proposicao.categoria && vt.proposicao.categoria !== 'normativa';
   if (vt?.proposicao.tema && !simb) porTema[vt.proposicao.tema] = (porTema[vt.proposicao.tema] ?? 0) + 1;
@@ -29,8 +31,17 @@ const temas = ORDEM_TEMAS.filter((t) => porTema[t])
 const OBJETO: Record<string, string> = {
   projeto: 'Projeto', veto: 'Veto', emenda: 'Emenda', redacao_final: 'Redação final', substitutivo: 'Substitutivo',
 };
-const primeiras = votos.slice(0, limite).map((v) => ({ v, vt: lista[posicao.get(v.id) ?? -1] }));
-const resumo = (['sim', 'nao', 'abstencao', 'ausente'] as const).map((k) => `${ROTULO_VOTO[k]} ${num(contagem[k] ?? 0)}`).join(' · ');
+const primeiras = votos.slice(0, limite).map((v) => {
+  const vt = lista[posicao.get(v.id) ?? -1];
+  return { v, vt, dica: vt?.objeto === 'veto' ? dicaVeto(sentidoDe(vt), CODIGO[v.voto] ?? v.voto) : '' };
+});
+// da mais antiga para a mais recente (o índice vem da mais recente para a mais antiga)
+const resumo = textoResumo(resumirPorProjeto(votos.filter((v) => posicao.has(v.id))
+  .sort((a, b) => posicao.get(b.id)! - posicao.get(a.id)!)
+  .map((v) => {
+    const vt = lista[posicao.get(v.id)!];
+    return { slug: vt.proposicao.id ? slugProposicao(vt.proposicao.id) : null, sentido: sentidoDe(vt), voto: CODIGO[v.voto] ?? v.voto };
+  })));
 ---
 <section class="secao como-votou" id="votos" data-como-votou data-limite={limite}
          data-sem-dados={semDados?.legs.join(',')} data-msg-sem-dados={semDados?.msg}
@@ -43,8 +54,8 @@ const resumo = (['sim', 'nao', 'abstencao', 'ausente'] as const).map((k) => `${R
     <>
       <p class="nota-votos">
         Só as votações nominais, em que cada voto fica registrado; a maioria das votações da casa é
-        simbólica e não diz quem votou o quê. Em veto, “sim” costuma ser manter o veto: confira o
-        resultado na página de cada votação.
+        simbólica e não diz quem votou o quê. O resumo conta cada projeto uma vez, pelo último voto sobre
+        ele. {comoContamos(casa)}.
       </p>
       <p class="resumo-votos rubrica" data-resumo>{resumo}</p>
       <div class="filtros" role="group" aria-label="Filtrar por voto">
@@ -68,12 +79,13 @@ const resumo = (['sim', 'nao', 'abstencao', 'ausente'] as const).map((k) => `${R
         </div>
       )}
       <ol class="votos-lista" data-votos-lista>
-        {primeiras.map(({ v, vt }) => (
+        {primeiras.map(({ v, vt, dica }) => (
           <li>
             <span class="rubrica">{dataCurta(vt?.data)} · {vt?.proposicao.id ? rotuloNorma(vt.proposicao.id) : 'votação'}{vt?.objeto && ` · ${OBJETO[vt.objeto] ?? vt.objeto}`}</span>
             <a class="ementa-curta" href={u(`/${casa}/votacoes/${v.id}/`)}>{ementa(vt?.proposicao.ementa)}</a>
             <span class="votos-linha">
               <span class:list={['voto', `voto-${v.voto}`]}>{ROTULO_VOTO[v.voto] ?? v.voto}</span>
+              {dica && <span class="dica-veto">{dica}</span>}
               {v.contra_partido && <span class="contra rubrica">contra o partido</span>}
             </span>
           </li>
@@ -103,7 +115,8 @@ const resumo = (['sim', 'nao', 'abstencao', 'ausente'] as const).map((k) => `${R
   .como-votou .votos-lista { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: 1fr 1fr; column-gap: 48px; }
   .como-votou .votos-lista li { display: grid; gap: 4px; padding: 12px 0; border-bottom: 1px solid var(--linha); justify-items: start; align-content: start; }
   .como-votou .ementa-curta { font-size: 17px; line-height: 1.35; text-decoration: none; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
-  .como-votou .votos-linha { display: flex; gap: 10px; align-items: center; }
+  .como-votou .votos-linha { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; }
+  .como-votou .dica-veto { font-size: 14px; color: var(--tinta-2); }
   .como-votou .voto { font-family: var(--f-mono); font-size: 13px; text-transform: uppercase; font-weight: 700; padding: 2px 8px; border: 1.5px solid currentColor; }
   .como-votou .voto-sim { color: var(--verde); }
   .como-votou .voto-nao { color: var(--carimbo); }
@@ -123,8 +136,11 @@ const resumo = (['sim', 'nao', 'abstencao', 'ausente'] as const).map((k) => `${R
 <script>
   import { dataCurta, rotuloNorma, ROTULO_VOTO } from '../lib/formatar';
   import { ROTULO_TEMA } from '../lib/categorias';
+  import { resumirPorProjeto, textoResumo, dicaVeto } from '../lib/resumoVotos';
 
-  type Linha = [string, string, string | null, string, string | null, string | null, string | null, number | null];
+  /** [id, data, proposição, ementa, objeto, categoria, tema, legislatura, sentido do sim, slug do projeto] */
+  type Linha = [string, string, string | null, string, string | null, string | null, string | null, number | null,
+    string | null, string | null];
   const sec = document.querySelector<HTMLElement>('[data-como-votou]');
   const dadosEl = sec?.querySelector('[data-votos-dados]');
   if (sec && dadosEl) {
@@ -149,17 +165,18 @@ const resumo = (['sim', 'nao', 'abstencao', 'ausente'] as const).map((k) => `${R
       if (!indice) return;
       const m = mandato();
       const doPeriodo = meus.filter(([i]) => m === 'todos' || String(indice![i][7]) === m);
-      // contagens do período: números dos temas e resumo dos votos (do tema escolhido, se houver)
-      const c: Record<string, number> = {};
+      // contagens do período: números dos temas e resumo por projeto (do tema escolhido, se houver)
       const porTema: Record<string, number> = {};
-      for (const [i, v] of doPeriodo) {
+      for (const [i] of doPeriodo) {
         const l = indice[i];
         if (l[6] && !simbolica(l)) porTema[l[6]] = (porTema[l[6]] ?? 0) + 1;
-        if (!estado.tema || (l[6] === estado.tema && !simbolica(l))) c[v] = (c[v] ?? 0) + 1;
       }
+      const doTema = doPeriodo.filter(([i]) => !estado.tema || (indice![i][6] === estado.tema && !simbolica(indice![i])));
+      // o índice vem da votação mais recente para a mais antiga; o resumo lê na ordem em que aconteceram
+      const cont = resumirPorProjeto([...doTema].sort((a, b) => b[0] - a[0])
+        .map(([i, v]) => ({ slug: indice![i][9], sentido: indice![i][8], voto: v })));
       sec!.querySelector('[data-total]')!.textContent = nf(doPeriodo.length);
-      sec!.querySelector('[data-resumo]')!.textContent = (estado.tema ? `Em ${ROTULO_TEMA[estado.tema].toLowerCase()}: ` : '')
-        + (['s', 'n', 'a', 'x']).map((k) => `${ROTULO_VOTO[VOTO[k]]} ${nf(c[k] ?? 0)}`).join(' · ');
+      sec!.querySelector('[data-resumo]')!.textContent = textoResumo(cont, estado.tema ? ROTULO_TEMA[estado.tema].toLowerCase() : undefined);
       sec!.querySelectorAll<HTMLButtonElement>('[data-voto-tema]').forEach((b) => {
         const n = porTema[b.dataset.votoTema!] ?? 0;
         b.hidden = n === 0;
@@ -177,11 +194,13 @@ const resumo = (['sim', 'nao', 'abstencao', 'ausente'] as const).map((k) => `${R
       });
       const base = sec!.dataset.base!;
       listaEl.innerHTML = passam.slice(0, estado.limite).map(([i, v, cp]) => {
-        const [id, data, prop, ementa, objeto] = indice![i];
+        const [id, data, prop, ementa, objeto, , , , sentido] = indice![i];
         const voto = VOTO[v] ?? v;
+        const dica = objeto === 'veto' ? dicaVeto(sentido, v) : '';
         return `<li><span class="rubrica">${esc(dataCurta(data))} · ${esc(prop ? rotuloNorma(prop) : 'votação')}${objeto ? ` · ${esc(OBJETO[objeto] ?? objeto)}` : ''}</span>`
           + `<a class="ementa-curta" href="${base}${esc(id)}/">${esc(ementa)}</a>`
           + `<span class="votos-linha"><span class="voto voto-${voto}">${esc(ROTULO_VOTO[voto] ?? voto)}</span>`
+          + `${dica ? `<span class="dica-veto">${esc(dica)}</span>` : ''}`
           + `${cp ? '<span class="contra rubrica">contra o partido</span>' : ''}</span></li>`;
       }).join('');
       maisEl.hidden = passam.length <= estado.limite;

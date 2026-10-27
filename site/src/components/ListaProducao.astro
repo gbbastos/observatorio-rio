@@ -13,6 +13,8 @@ export interface ItemProducao {
   ementa: string; resumo?: string | null; categoria: string; simbolica: boolean; tema: string | null;
   leg: number | null; n_autores: number; coautores?: string[]; status?: string | null;
   lei?: { rotulo: string; url: string | null } | null;
+  /** passou por votação nominal: página do projeto e placar */
+  votada?: { href: string; texto: string } | null;
 }
 
 interface Props {
@@ -48,6 +50,7 @@ for (const x of itens) {
 // do maior para o menor, com "outros" sempre no fim
 const temas = ORDEM_TEMAS.filter((t) => porTema[t])
   .sort((x, y) => Number(x === 'outros') - Number(y === 'outros') || porTema[y] - porTema[x]);
+const temVotada = itens.some((x) => x.votada);
 const statusRuim = (s?: string | null) => !!s && /inconstitucional|revoga/i.test(s);
 ---
 <section class="secao producao" id={id} data-secao data-limite={limite}
@@ -85,6 +88,7 @@ const statusRuim = (s?: string | null) => !!s && /inconstitucional|revoga/i.test
       <button class="botao" type="button" data-filtro="simb:" aria-pressed="false">Só regras e políticas</button>
       {extra === 'grupo' && <button class="botao" type="button" data-filtro="grupo:1" aria-pressed="false">Assinadas em grupo</button>}
       {extra === 'virou' && <button class="botao" type="button" data-filtro="virou:1" aria-pressed="false">Viraram lei</button>}
+      {temVotada && <button class="botao" type="button" data-filtro="votada:1" aria-pressed="false">Com votação nominal</button>}
     </div>
   )}
 
@@ -105,7 +109,7 @@ const statusRuim = (s?: string | null) => !!s && /inconstitucional|revoga/i.test
     {itens.map((x, i) => (
       <li data-item data-leg={x.leg ?? undefined} data-cat={x.categoria} data-simb={x.simbolica ? '1' : undefined}
           data-tema={x.tema ?? undefined} data-grupo={x.n_autores > 1 ? '1' : undefined}
-          data-virou={x.lei ? '1' : undefined} hidden={i >= limite}>
+          data-virou={x.lei ? '1' : undefined} data-votada={x.votada ? '1' : undefined} hidden={i >= limite}>
         <div class="im">
           {x.url ? <a href={x.url} rel="noopener">{x.rotulo}</a> : <span>{x.rotulo}</span>}
           <span class="dt">{x.data ? dataCurta(x.data) : x.ano}</span>
@@ -121,6 +125,7 @@ const statusRuim = (s?: string | null) => !!s && /inconstitucional|revoga/i.test
             {x.lei && (x.lei.url
               ? <a class="virou" href={x.lei.url} rel="noopener">virou {x.lei.rotulo}</a>
               : <span class="virou">virou {x.lei.rotulo}</span>)}
+            {x.votada && <a class="votada" href={x.votada.href}>{x.votada.texto} →</a>}
             {x.n_autores > 1 && (
               <span class="co" title={x.coautores?.join(', ') || undefined}>
                 com mais {x.n_autores - 1} {x.n_autores - 1 === 1 ? 'autor' : 'autores'}
@@ -171,6 +176,9 @@ const statusRuim = (s?: string | null) => !!s && /inconstitucional|revoga/i.test
   .producao .rs { margin: 8px 0 0; font-size: 16px; color: var(--tinta-2); }
   .producao .ir { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 10px 0 0; }
   .producao .virou { font-family: var(--f-mono); font-size: 13px; font-weight: 700; color: var(--verde); }
+  .producao .votada { font-family: var(--f-mono); font-size: 13px; font-weight: 700; color: var(--tinta); text-decoration: none;
+    border: 1.5px solid var(--tinta); padding: 2px 8px; }
+  .producao .votada:hover { background: var(--tinta); color: var(--papel); }
   .producao .co { font-family: var(--f-mono); font-size: 13px; color: var(--carimbo); border-bottom: 1px dotted currentColor; cursor: help; }
   .producao .mais { margin-top: 18px; }
   @media (max-width: 600px) {

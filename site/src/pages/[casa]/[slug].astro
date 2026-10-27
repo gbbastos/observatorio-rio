@@ -7,6 +7,7 @@ import { casasDisponiveis, meta, parlamentares, parlamentar, leis, type Casa } f
 import { corPartido } from '../../lib/partidos';
 import { TEMA_FRASE } from '../../lib/categorias';
 import { u, num, pct, pctTaxa, dataCurta, ementa, rotuloNorma } from '../../lib/formatar';
+import { proposicoesVotadas, sentidoDoSim, slugProposicao, ultimaVotacao, ROTULO_PARTE } from '../../lib/proposicoes';
 
 export function getStaticPaths() {
   return casasDisponiveis().flatMap((casa) =>
@@ -27,13 +28,26 @@ const projetos = p.lista_proposicoes.filter((x) => x.tipo === 'PL' || x.tipo ===
 const pedidos = p.lista_proposicoes.filter((x) => x.tipo === 'REQINF');
 const outras = p.lista_proposicoes.filter((x) => !['PL', 'PLC', 'REQINF'].includes(x.tipo));
 
+// Projetos que passaram por votação nominal levam à página do projeto (quem votou a favor e contra).
+const votadas = proposicoesVotadas(casa);
+function votada(id: string | null | undefined) {
+  const pv = id ? votadas.get(slugProposicao(id)) : undefined;
+  if (!pv) return null;
+  const href = u(`/${casa}/proposicoes/${pv.slug}/`);
+  const v = pv.decisivas[pv.decisivas.length - 1];
+  if (!v) return { href, texto: `votação nominal de ${ROTULO_PARTE[sentidoDoSim(casa, ultimaVotacao(pv)) ?? ''] ?? 'emenda'}` };
+  if (!v.contagem) return { href, texto: 'votação nominal' };
+  const [a, c] = sentidoDoSim(casa, v) === 'veto' ? [v.contagem.nao, v.contagem.sim] : [v.contagem.sim, v.contagem.nao];
+  return { href, texto: `votação nominal: ${a} a favor, ${c} contra` };
+}
+
 const itensLeis: ItemProducao[] = leisOrd.map((l) => ({
   id: l.id, rotulo: rotuloNorma(l.id), url: l.url, data: l.data, ano: l.ano, ementa: l.ementa,
   resumo: l.resumo, categoria: l.categoria, simbolica: l.simbolica, tema: l.tema, leg: l.leg,
-  n_autores: l.n_autores, coautores: l.coautores, status: l.status,
+  n_autores: l.n_autores, coautores: l.coautores, status: l.status, votada: votada(l.projeto),
 }));
 const itensProjetos: ItemProducao[] = projetos.map((x) => ({
-  id: x.id, rotulo: x.id.replace('-', ' '), url: null, data: x.data, ano: x.id.split('/')[1], ementa: ementa(x.ementa),
+  id: x.id, rotulo: x.id.replace('-', ' '), url: votada(x.id)?.href ?? null, votada: votada(x.id), data: x.data, ano: x.id.split('/')[1], ementa: ementa(x.ementa),
   categoria: x.categoria ?? 'normativa', simbolica: !!x.simbolica, tema: x.tema, leg: x.leg,
   n_autores: 1 + x.coautores, lei: x.lei ? { rotulo: rotuloNorma(x.lei), url: urlLei.get(x.lei) ?? null } : null,
 }));
