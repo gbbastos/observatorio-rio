@@ -40,7 +40,9 @@ _REGRAS: list[tuple[str, re.Pattern[str]]] = [
         r"\bbem cultural\b|guia oficial|roteiro turistico|roteiro cultural|\bdeclara\b.*\bpatrimonio\b|"
         r"\btomba\b|\btombamento\b|capital (municipal|nacional) d[oa]|\bmarco historico\b|"
         r"\bpolo (gastronomico|cultural|turistico|recreativo|de lazer)|"
-        r"\b(reconhece|considera|declara)\b.{0,40}\bde (relevante )?interesse (cultural|turistico|publico|social|historico)")),
+        # "área de (especial) interesse social" é zoneamento urbano, não reconhecimento
+        r"\b(reconhece|considera|declara)\b.{0,40}\bde (relevante )?interesse (cultural|turistico|historico)|"
+        r"\b(reconhece|considera)\b.{0,40}\bde (relevante )?interesse (publico|social)")),
     ("honraria", re.compile(
         r"\btitulo de cidada|\bcidadao (honorario|benemerito|carioca)|\bcidada (honoraria|benemerita|carioca)|"
         r"\bmedalha\b|\bdiploma\b|\bhonraria\b|\bcomenda\b|\bmoca(o)? de\b|\bvoto de (louvor|aplauso|congratula)|"
